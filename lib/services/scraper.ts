@@ -1,6 +1,7 @@
 // lib/services/scraper.ts
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { config } from "../config";
 
 export interface ScrapedPage {
   url: string;
@@ -9,55 +10,85 @@ export interface ScrapedPage {
   links: string[];
 }
 
+/**
+ * Efficient Queue implementation using index pointer
+ */
+class Queue<T> {
+  private items: T[] = [];
+  private head = 0;
+
+  enqueue(item: T): void {
+    this.items.push(item);
+  }
+
+  dequeue(): T | undefined {
+    if (this.isEmpty()) {
+      return undefined;
+    }
+    const item = this.items[this.head];
+    this.head++;
+
+    // Periodically clean up the array to prevent memory leaks
+    if (this.head > 100) {
+      this.items = this.items.slice(this.head);
+      this.head = 0;
+    }
+
+    return item;
+  }
+
+  isEmpty(): boolean {
+    return this.head >= this.items.length;
+  }
+
+  get length(): number {
+    return this.items.length - this.head;
+  }
+}
+
 export class WebScraper {
   private visited: Set<string> = new Set();
   private maxPages: number;
   private baseUrl: string;
+  private baseHostname: string;
 
-  constructor(baseUrl: string, maxPages: number = 50) {
+  constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
     this.baseUrl = this.normalizeUrl(baseUrl);
     this.maxPages = maxPages;
+    this.baseHostname = new URL(this.baseUrl).hostname;
   }
 
+  /**
+   * Normalize URL to base domain
+   */
   private normalizeUrl(url: string): string {
     try {
       const urlObj = new URL(url);
       return `${urlObj.protocol}//${urlObj.host}`;
-    } catch {
-      throw new Error("Invalid URL provided");
+    } catch (error) {
+      throw new Error(`Invalid URL provided: ${url}`);
     }
   }
 
+  /**
+   * Check if URL belongs to same domain
+   */
   private isValidUrl(url: string): boolean {
     try {
       const urlObj = new URL(url);
-      return urlObj.hostname === new URL(this.baseUrl).hostname;
+      return urlObj.hostname === this.baseHostname;
     } catch {
       return false;
     }
   }
 
-  //   private extractContent($: cheerio.Root): string {
-  //     // Remove unwanted elements
-  //     $("script, style, nav, footer, iframe, noscript").remove();
-
-  //     // Get main content
-  //     const mainContent =
-  //       $("main").text() ||
-  //       $("article").text() ||
-  //       $(".content").text() ||
-  //       $("body").text();
-
-  //     // Clean up whitespace
-  //     return mainContent.replace(/\s+/g, " ").trim().substring(0, 8000); // Limit content length
-  //   }
-
-  // lib/services/scraper.ts
+  /**
+   * Extract main content from page
+   */
   private extractContent($: cheerio.Root): string {
     // Remove unwanted elements
     $("script, style, nav, footer, iframe, noscript, header, aside").remove();
 
-    // Try multiple selectors to find main content
     let mainContent = "";
 
     // Priority order for content extraction
@@ -79,34 +110,50 @@ export class WebScraper {
       }
     }
 
-    // Clean up whitespace but preserve some structure
+    // Clean up whitespace
     const cleaned = mainContent
       .replace(/\s+/g, " ") // Replace multiple spaces with single space
       .replace(/\n+/g, "\n") // Replace multiple newlines with single newline
       .trim();
 
-    // Return up to 8000 characters
-    return cleaned.substring(0, 8000);
+    // Return up to maxContentLength characters
+    return cleaned.substring(0, config.ingestion.maxContentLength);
   }
 
+  /**
+   * Extract links from page
+   */
   private extractLinks($: cheerio.Root): string[] {
     const links: string[] = [];
+    const seenLinks = new Set<string>();
+
     $("a[href]").each((_, element) => {
       const href = $(element).attr("href");
       if (href) {
         try {
           const absoluteUrl = new URL(href, this.baseUrl).href;
-          if (this.isValidUrl(absoluteUrl) && !this.visited.has(absoluteUrl)) {
+
+          // Only add if valid, not visited, and not already in list
+          if (
+            this.isValidUrl(absoluteUrl) &&
+            !this.visited.has(absoluteUrl) &&
+            !seenLinks.has(absoluteUrl)
+          ) {
             links.push(absoluteUrl);
+            seenLinks.add(absoluteUrl);
           }
         } catch {
           // Invalid URL, skip
         }
       }
     });
+
     return links;
   }
 
+  /**
+   * Scrape a single page
+   */
   async scrapePage(url: string): Promise<ScrapedPage | null> {
     if (this.visited.has(url) || this.visited.size >= this.maxPages) {
       return null;
@@ -120,6 +167,7 @@ export class WebScraper {
         headers: {
           "User-Agent": "WebRep-Bot/1.0",
         },
+        maxRedirects: 5,
       });
 
       const $ = cheerio.load(response.data);
@@ -134,33 +182,70 @@ export class WebScraper {
         links,
       };
     } catch (error) {
-      console.error(`Error scraping ${url}:`, error);
+      console.error(
+        `Error scraping ${url}:`,
+        error instanceof Error ? error.message : error
+      );
       return null;
     }
   }
 
+  /**
+   * Scrape website with optimized BFS
+   * Time complexity: O(V + E) where V = pages, E = links
+   */
   async scrapeWebsite(): Promise<ScrapedPage[]> {
     const pages: ScrapedPage[] = [];
-    const queue: string[] = [this.baseUrl];
+    const queue = new Queue<string>();
+    queue.enqueue(this.baseUrl);
 
-    while (queue.length > 0 && pages.length < this.maxPages) {
-      const url = queue.shift()!;
+    // Track URLs in queue to avoid duplicates
+    const inQueue = new Set<string>([this.baseUrl]);
+
+    while (!queue.isEmpty() && pages.length < this.maxPages) {
+      const url = queue.dequeue();
+      if (!url) break;
+
+      console.log(
+        `Scraping: ${url} (${pages.length + 1}/${
+          this.maxPages
+        } pages collected)`
+      );
+
       const page = await this.scrapePage(url);
 
       if (page) {
         pages.push(page);
-        // Add new links to queue
-        page.links.forEach((link) => {
-          if (!this.visited.has(link) && !queue.includes(link)) {
-            queue.push(link);
+
+        // Add new links to queue (O(1) per link)
+        for (const link of page.links) {
+          if (!inQueue.has(link) && !this.visited.has(link)) {
+            queue.enqueue(link);
+            inQueue.add(link);
           }
-        });
+        }
       }
 
-      // Small delay to avoid overwhelming the server
+      // Small delay to be respectful to the server
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
+    console.log(`✓ Scraped ${pages.length} pages from ${this.baseUrl}`);
     return pages;
+  }
+
+  /**
+   * Get scraping statistics
+   */
+  getStats(): {
+    pagesScraped: number;
+    pagesVisited: number;
+    maxPages: number;
+  } {
+    return {
+      pagesScraped: this.visited.size,
+      pagesVisited: this.visited.size,
+      maxPages: this.maxPages,
+    };
   }
 }
