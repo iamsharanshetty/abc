@@ -1,12 +1,22 @@
 // lib/services/embeddings.ts
 import OpenAI from "openai";
 import { config } from "../config";
-import {
-  supabase,
-  WebsiteEmbeddingInsert,
-  EmbeddingMetadata,
-  handleSupabaseError,
-} from "../supabase";
+// import {
+//   supabase,
+//   WebsiteEmbeddingInsert,
+//   EmbeddingMetadata,
+//   handleSupabaseError,
+// } from "../supabase";
+
+import { createClient } from "../supabase/server";
+import type { Database } from "../database.types";
+
+// Define types based on database types
+type EmbeddingMetadata =
+  Database["public"]["Tables"]["website_embeddings"]["Row"]["metadata"];
+type WebsiteEmbeddingInsert =
+  Database["public"]["Tables"]["website_embeddings"]["Insert"];
+
 import { withRateLimit } from "./rateLimiter";
 
 const openai = new OpenAI({
@@ -162,7 +172,7 @@ export class EmbeddingService {
     websiteUrl: string,
     pageUrl: string,
     content: string,
-    metadata?: Omit<EmbeddingMetadata, "chunkIndex" | "totalChunks">
+    metadata?: { title?: string; scrapedAt?: string }
   ): Promise<void> {
     // Validate input
     if (!websiteUrl || !pageUrl || !content) {
@@ -177,19 +187,22 @@ export class EmbeddingService {
       // Generate embeddings for all chunks
       const embeddings = await this.generateEmbeddingsBatch(chunks);
 
+      // Create Supabase client
+      const supabase = await createClient();
+
       // Prepare records with enhanced metadata
       const records: WebsiteEmbeddingInsert[] = chunks.map((chunk, index) => ({
         website_url: websiteUrl,
         page_url: pageUrl,
         content_section: chunk,
-        embedding: embeddings[index],
+        embedding: embeddings[index] as any, // Type assertion for pgvector
         metadata: {
-          ...metadata,
+          title: metadata?.title,
           scrapedAt: metadata?.scrapedAt || new Date().toISOString(),
           contentLength: chunk.length,
           chunkIndex: index,
           totalChunks: chunks.length,
-        },
+        } as any,
       }));
 
       // Insert in batches to avoid hitting limits
@@ -197,13 +210,12 @@ export class EmbeddingService {
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
 
-        // Type assertion to help TypeScript understand the type
         const { error } = await supabase
           .from("website_embeddings")
-          .insert(batch as any); // Temporary workaround for Supabase type issue
+          .insert(batch);
 
         if (error) {
-          handleSupabaseError(error);
+          throw new Error(`Supabase error: ${error.message}`);
         }
 
         console.log(
@@ -236,13 +248,15 @@ export class EmbeddingService {
     }
 
     try {
+      const supabase = await createClient();
+
       const { error } = await supabase
         .from("website_embeddings")
         .delete()
         .eq("website_url", websiteUrl);
 
       if (error) {
-        handleSupabaseError(error);
+        throw new Error(`Supabase error: ${error.message}`);
       }
 
       console.log(`✓ Successfully deleted embeddings for ${websiteUrl}`);
