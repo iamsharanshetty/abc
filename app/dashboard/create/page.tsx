@@ -1,0 +1,212 @@
+"use client"
+
+import * as React from "react"
+import { ArrowRight, Bot, Check, Loader2, Settings, Sparkles } from "lucide-react"
+
+import { Button } from "@/components/ui/Button"
+import { Input } from "@/components/ui/Input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
+import { cn } from "@/lib/utils"
+
+const ROLES = [
+    { id: "sales", label: "Sales Representative", description: "Focuses on converting leads and closing deals." },
+    { id: "support", label: "Customer Support", description: "Handles inquiries and resolves issues." },
+    { id: "custom", label: "Custom Persona", description: "Tailored to your specific needs." },
+]
+
+const PROGRESS_STEPS = [
+    "Setting up agent environment...",
+    "Analyzing website content...",
+    "Identifying key products and services...",
+    "Generating agent persona...",
+    "Finalizing configuration...",
+]
+
+export default function CreateAgentPage() {
+    const [step, setStep] = React.useState<"input" | "generating" | "settings">("input")
+    const [url, setUrl] = React.useState("")
+    const [selectedRole, setSelectedRole] = React.useState<string>(ROLES[0].id)
+    const [progressIndex, setProgressIndex] = React.useState(0)
+
+    const handleStart = () => {
+        if (!url) return
+        setStep("generating")
+        setProgressIndex(0)
+    }
+
+    React.useEffect(() => {
+        if (step === "generating") {
+            if (progressIndex < PROGRESS_STEPS.length) {
+                const timeout = setTimeout(() => {
+                    setProgressIndex((prev) => prev + 1)
+                }, 1500) // 1.5s per step
+                return () => clearTimeout(timeout)
+            } else {
+                // Finished
+                setTimeout(() => setStep("settings"), 1000)
+            }
+        }
+    }, [step, progressIndex])
+
+    return (
+        <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row overflow-hidden transition-all duration-500 ease-in-out">
+            {/* Left Panel (Input) */}
+            <div
+                className={cn(
+                    "flex flex-col justify-center p-6 transition-all duration-500 ease-in-out",
+                    step === "input" ? "w-full items-center" : "w-full md:w-1/3 border-r bg-muted/10"
+                )}
+            >
+                <div className={cn("w-full max-w-md space-y-6", step !== "input" && "opacity-80 pointer-events-none")}>
+                    <div className="space-y-2 text-center md:text-left">
+                        <h1 className="text-3xl font-bold tracking-tight">Create New Agent</h1>
+                        <p className="text-muted-foreground">
+                            Enter your website URL to generate a custom AI agent.
+                        </p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Website URL
+                            </label>
+                            <Input
+                                placeholder="example.com"
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                disabled={step !== "input"}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Agent Role
+                            </label>
+                            <div className="grid gap-2">
+                                {ROLES.map((role) => (
+                                    <div
+                                        key={role.id}
+                                        className={cn(
+                                            "flex items-start space-x-3 rounded-md border p-3 cursor-pointer hover:bg-accent transition-colors",
+                                            selectedRole === role.id ? "border-primary bg-accent" : "border-input",
+                                            step !== "input" && "cursor-default"
+                                        )}
+                                        onClick={() => step === "input" && setSelectedRole(role.id)}
+                                    >
+                                        <div className={cn(
+                                            "mt-0.5 h-4 w-4 rounded-full border border-primary",
+                                            selectedRole === role.id ? "bg-primary" : "bg-transparent"
+                                        )} />
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium leading-none">{role.label}</p>
+                                            <p className="text-xs text-muted-foreground">{role.description}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {step === "input" && (
+                            <Button className="w-full" size="lg" onClick={handleStart} disabled={!url}>
+                                <Sparkles className="mr-2 h-4 w-4" />
+                                Generate Agent
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Right Panel (Progress / Settings) */}
+            <div className={cn(
+                "flex-1 p-6 transition-all duration-500 ease-in-out overflow-y-auto",
+                step === "input" ? "hidden opacity-0 translate-x-full" : "block opacity-100 translate-x-0"
+            )}>
+                <div className="h-full flex flex-col justify-center max-w-2xl mx-auto">
+
+                    {step === "generating" && (
+                        <div className="space-y-8">
+                            <div className="space-y-2">
+                                <h2 className="text-2xl font-semibold tracking-tight">Building your agent...</h2>
+                                <p className="text-muted-foreground">Please wait while we analyze your website and configure the agent.</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                {PROGRESS_STEPS.map((text, index) => (
+                                    <div key={index} className="flex items-center space-x-3">
+                                        {index < progressIndex ? (
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                                <Check className="h-4 w-4" />
+                                            </div>
+                                        ) : index === progressIndex ? (
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary">
+                                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                            </div>
+                                        ) : (
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground">
+                                                <span className="text-xs">{index + 1}</span>
+                                            </div>
+                                        )}
+                                        <span className={cn(
+                                            "text-sm transition-colors",
+                                            index === progressIndex ? "font-medium text-foreground" :
+                                                index < progressIndex ? "text-muted-foreground" : "text-muted-foreground/50"
+                                        )}>
+                                            {text}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {step === "settings" && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-1">
+                                    <h2 className="text-2xl font-semibold tracking-tight">Agent Proposal</h2>
+                                    <p className="text-muted-foreground">Review and customize your new agent.</p>
+                                </div>
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                                    <Bot className="h-6 w-6 text-primary" />
+                                </div>
+                            </div>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>General Settings</CardTitle>
+                                    <CardDescription>Basic information about your agent.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Name</label>
+                                        <Input defaultValue="Alenta Support Bot" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Persona</label>
+                                        <Input defaultValue="Professional, Helpful, and Concise" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Summary</label>
+                                        <textarea
+                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            defaultValue="This agent is designed to assist customers with inquiries about products, pricing, and support tickets. It has been trained on your documentation and FAQ pages."
+                                        />
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <div className="flex justify-end space-x-4">
+                                <Button variant="outline" onClick={() => setStep("input")}>Back</Button>
+                                <Button>
+                                    Review Proposal
+                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            </div>
+        </div>
+    )
+}
