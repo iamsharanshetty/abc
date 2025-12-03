@@ -43,4 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 app/api/ingest/route.ts
+app/api/debug-scraper/route.ts
+app/api/test-parser/route.ts
 
