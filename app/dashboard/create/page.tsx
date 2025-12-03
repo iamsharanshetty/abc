@@ -1,18 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { ArrowRight, Bot, Check, Loader2, Settings, Sparkles } from "lucide-react"
+import { ArrowRight, Bot, Check, Loader2, Settings, Sparkles, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup"
 import { cn } from "@/lib/utils"
-
-const ROLES = [
-    { id: "sales", label: "Sales Representative", description: "Focuses on converting leads and closing deals." },
-    { id: "support", label: "Customer Support", description: "Handles inquiries and resolves issues." },
-    { id: "custom", label: "Custom Persona", description: "Tailored to your specific needs." },
-]
+import { validateUrl } from "@/lib/validation"
+import { AGENT_ROLES, AgentRole } from "@/types/agent"
 
 const PROGRESS_STEPS = [
     "Setting up agent environment...",
@@ -25,13 +22,32 @@ const PROGRESS_STEPS = [
 export default function CreateAgentPage() {
     const [step, setStep] = React.useState<"input" | "generating" | "settings">("input")
     const [url, setUrl] = React.useState("")
-    const [selectedRole, setSelectedRole] = React.useState<string>(ROLES[0].id)
+    const [selectedRole, setSelectedRole] = React.useState<AgentRole>(AGENT_ROLES[0].id)
     const [progressIndex, setProgressIndex] = React.useState(0)
+    const [error, setError] = React.useState("")
+    const [isLoading, setIsLoading] = React.useState(false)
 
-    const handleStart = () => {
-        if (!url) return
-        setStep("generating")
-        setProgressIndex(0)
+    const handleStart = async () => {
+        const validationError = validateUrl(url)
+        if (validationError) {
+            setError(validationError)
+            return
+        }
+
+        setError("")
+        setIsLoading(true)
+
+        try {
+            // Simulate API connection check
+            // In a real app, this would be: await api.checkConnection()
+            await new Promise(resolve => setTimeout(resolve, 1000))
+
+            setStep("generating")
+            setProgressIndex(0)
+        } catch (err) {
+            setError("Failed to connect to agent generation service. Please try again.")
+            setIsLoading(false)
+        }
     }
 
     React.useEffect(() => {
@@ -43,7 +59,10 @@ export default function CreateAgentPage() {
                 return () => clearTimeout(timeout)
             } else {
                 // Finished
-                setTimeout(() => setStep("settings"), 1000)
+                setTimeout(() => {
+                    setStep("settings")
+                    setIsLoading(false)
+                }, 1000)
             }
         }
     }, [step, progressIndex])
@@ -67,49 +86,88 @@ export default function CreateAgentPage() {
 
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            <label
+                                htmlFor="website-url"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
                                 Website URL
                             </label>
                             <Input
+                                id="website-url"
                                 placeholder="example.com"
                                 value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                disabled={step !== "input"}
+                                onChange={(e) => {
+                                    setUrl(e.target.value)
+                                    if (error) setError("")
+                                }}
+                                disabled={step !== "input" || isLoading}
+                                aria-invalid={!!error}
+                                aria-describedby={error ? "url-error" : undefined}
                             />
+                            {error && (
+                                <div id="url-error" className="flex items-center text-sm text-red-500 mt-1">
+                                    <AlertCircle className="h-4 w-4 mr-1" />
+                                    {error}
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                 Agent Role
                             </label>
-                            <div className="grid gap-2">
-                                {ROLES.map((role) => (
-                                    <div
-                                        key={role.id}
-                                        className={cn(
-                                            "flex items-start space-x-3 rounded-md border p-3 cursor-pointer hover:bg-accent transition-colors",
-                                            selectedRole === role.id ? "border-primary bg-accent" : "border-input",
-                                            step !== "input" && "cursor-default"
-                                        )}
-                                        onClick={() => step === "input" && setSelectedRole(role.id)}
-                                    >
-                                        <div className={cn(
-                                            "mt-0.5 h-4 w-4 rounded-full border border-primary",
-                                            selectedRole === role.id ? "bg-primary" : "bg-transparent"
-                                        )} />
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-medium leading-none">{role.label}</p>
-                                            <p className="text-xs text-muted-foreground">{role.description}</p>
-                                        </div>
+                            <RadioGroup
+                                value={selectedRole}
+                                onValueChange={(value) => setSelectedRole(value as AgentRole)}
+                                className="grid gap-2"
+                                disabled={step !== "input" || isLoading}
+                            >
+                                {AGENT_ROLES.map((role) => (
+                                    <div key={role.id}>
+                                        <RadioGroupItem
+                                            value={role.id}
+                                            id={role.id}
+                                            className="peer sr-only"
+                                        />
+                                        <label
+                                            htmlFor={role.id}
+                                            className={cn(
+                                                "flex items-start space-x-3 rounded-md border p-3 cursor-pointer hover:bg-accent transition-colors peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-accent",
+                                                step !== "input" && "cursor-default"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "mt-0.5 h-4 w-4 rounded-full border border-primary flex items-center justify-center",
+                                                selectedRole === role.id ? "bg-primary" : "bg-transparent"
+                                            )}>
+                                                {selectedRole === role.id && <div className="h-2 w-2 rounded-full bg-background" />}
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-medium leading-none">{role.label}</p>
+                                                <p className="text-xs text-muted-foreground">{role.description}</p>
+                                            </div>
+                                        </label>
                                     </div>
                                 ))}
-                            </div>
+                            </RadioGroup>
                         </div>
 
                         {step === "input" && (
-                            <Button className="w-full" size="lg" onClick={handleStart} disabled={!url}>
-                                <Sparkles className="mr-2 h-4 w-4" />
-                                Generate Agent
+                            <Button
+                                className="w-full"
+                                size="lg"
+                                onClick={handleStart}
+                                disabled={isLoading}
+                                isLoading={isLoading}
+                            >
+                                {isLoading ? (
+                                    "Starting..."
+                                ) : (
+                                    <>
+                                        <Sparkles className="mr-2 h-4 w-4" />
+                                        Generate Agent
+                                    </>
+                                )}
                             </Button>
                         )}
                     </div>
@@ -124,7 +182,7 @@ export default function CreateAgentPage() {
                 <div className="h-full flex flex-col justify-center max-w-2xl mx-auto">
 
                     {step === "generating" && (
-                        <div className="space-y-8">
+                        <div className="space-y-8" role="status" aria-live="polite">
                             <div className="space-y-2">
                                 <h2 className="text-2xl font-semibold tracking-tight">Building your agent...</h2>
                                 <p className="text-muted-foreground">Please wait while we analyze your website and configure the agent.</p>
@@ -178,16 +236,17 @@ export default function CreateAgentPage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Name</label>
-                                        <Input defaultValue="Alenta Support Bot" />
+                                        <label htmlFor="agent-name" className="text-sm font-medium">Name</label>
+                                        <Input id="agent-name" defaultValue="Alenta Support Bot" />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Persona</label>
-                                        <Input defaultValue="Professional, Helpful, and Concise" />
+                                        <label htmlFor="agent-persona" className="text-sm font-medium">Persona</label>
+                                        <Input id="agent-persona" defaultValue="Professional, Helpful, and Concise" />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Summary</label>
+                                        <label htmlFor="agent-summary" className="text-sm font-medium">Summary</label>
                                         <textarea
+                                            id="agent-summary"
                                             className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                             defaultValue="This agent is designed to assist customers with inquiries about products, pricing, and support tickets. It has been trained on your documentation and FAQ pages."
                                         />

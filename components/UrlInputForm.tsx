@@ -6,6 +6,7 @@ import { ArrowRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
+import { validateUrl as importValidateUrl } from "@/lib/validation"
 
 export function UrlInputForm() {
     const [url, setUrl] = React.useState("")
@@ -13,16 +14,7 @@ export function UrlInputForm() {
     const [isLoading, setIsLoading] = React.useState(false)
 
     const validateUrl = (value: string) => {
-        if (!value) return "Please enter a URL"
-        try {
-            const urlObject = new URL(value.startsWith("http") ? value : `https://${value}`)
-            if (!urlObject.hostname.includes(".")) {
-                return "Please enter a valid URL (e.g., example.com)"
-            }
-            return ""
-        } catch {
-            return "Please enter a valid URL (e.g., example.com)"
-        }
+        return importValidateUrl(value)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
