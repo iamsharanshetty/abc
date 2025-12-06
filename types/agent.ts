@@ -20,3 +20,15 @@ export const AGENT_ROLES = [
 ] as const
 
 export type AgentRole = typeof AGENT_ROLES[number]["id"]
+
+export const SUGGESTED_FUNCTIONS = [
+    "Product Q&A",
+    "Ticket Creation",
+    "Pricing Info",
+    "Troubleshooting",
+]
+
+export const RECOMMENDED_AGENT_TYPE = {
+    role: "support" as AgentRole,
+    reason: "Based on your website content, a Customer Support agent is best suited to handle inquiries found on your FAQ and Contact pages.",
+}

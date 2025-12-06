@@ -13,13 +13,13 @@ export function UrlInputForm() {
     const [error, setError] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
 
-    const validateUrl = (value: string) => {
+    const validateInput = (value: string) => {
         return importValidateUrl(value)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        const validationError = validateUrl(url)
+        const validationError = validateInput(url)
         if (validationError) {
             setError(validationError)
             return

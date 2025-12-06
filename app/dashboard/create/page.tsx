@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup"
+import { Badge } from "@/components/ui/Badge"
 import { cn } from "@/lib/utils"
 import { validateUrl } from "@/lib/validation"
-import { AGENT_ROLES, AgentRole } from "@/types/agent"
+import { AGENT_ROLES, AgentRole, SUGGESTED_FUNCTIONS, RECOMMENDED_AGENT_TYPE } from "@/types/agent"
+import { generateContentEmbeddings } from "@/app/actions/generate-embeddings"
 
 const PROGRESS_STEPS = [
     "Setting up agent environment...",
@@ -38,14 +40,18 @@ export default function CreateAgentPage() {
         setIsLoading(true)
 
         try {
-            // Simulate API connection check
-            // In a real app, this would be: await api.checkConnection()
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            // Call the actual Server Action
+            const result = await generateContentEmbeddings(url)
+
+            if (!result.success) {
+                throw new Error(result.message || "Failed to generate agent")
+            }
 
             setStep("generating")
             setProgressIndex(0)
         } catch (err) {
-            setError("Failed to connect to agent generation service. Please try again.")
+            console.error(err)
+            setError(err instanceof Error ? err.message : "Failed to connect to agent generation service. Please try again.")
             setIsLoading(false)
         }
     }
@@ -68,7 +74,7 @@ export default function CreateAgentPage() {
     }, [step, progressIndex])
 
     return (
-        <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row overflow-hidden transition-all duration-500 ease-in-out">
+        <div className="flex min-h-[calc(100vh-4rem)] flex-col md:flex-row md:overflow-hidden transition-all duration-500 ease-in-out">
             {/* Left Panel (Input) */}
             <div
                 className={cn(
@@ -170,6 +176,21 @@ export default function CreateAgentPage() {
                                 )}
                             </Button>
                         )}
+
+                        {/* Debug Button - Remove in production */}
+                        {step === "input" && (
+                            <Button
+                                variant="ghost"
+                                className="w-full text-muted-foreground"
+                                size="sm"
+                                onClick={() => {
+                                    setStep("generating")
+                                    setProgressIndex(0)
+                                }}
+                            >
+                                (Debug) Simulate Success
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -235,6 +256,20 @@ export default function CreateAgentPage() {
                                     <CardDescription>Basic information about your agent.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
+                                    {/* Agent Type Recommendation */}
+                                    <div className="rounded-lg border bg-muted/50 p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium">Recommended Agent Type</span>
+                                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
+                                                <Sparkles className="mr-1 h-3 w-3" />
+                                                {AGENT_ROLES.find(r => r.id === RECOMMENDED_AGENT_TYPE.role)?.label}
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {RECOMMENDED_AGENT_TYPE.reason}
+                                        </p>
+                                    </div>
+
                                     <div className="space-y-2">
                                         <label htmlFor="agent-name" className="text-sm font-medium">Name</label>
                                         <Input id="agent-name" defaultValue="Alenta Support Bot" />
@@ -243,6 +278,19 @@ export default function CreateAgentPage() {
                                         <label htmlFor="agent-persona" className="text-sm font-medium">Persona</label>
                                         <Input id="agent-persona" defaultValue="Professional, Helpful, and Concise" />
                                     </div>
+
+                                    {/* Suggested Roles/Functions */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Suggested Functions</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {SUGGESTED_FUNCTIONS.map((func) => (
+                                                <Badge key={func} variant="outline" className="cursor-pointer hover:bg-accent">
+                                                    {func}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     <div className="space-y-2">
                                         <label htmlFor="agent-summary" className="text-sm font-medium">Summary</label>
                                         <textarea

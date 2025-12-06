@@ -8,9 +8,11 @@ import { LayoutDashboard, Settings, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
 
-interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
+interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
+    onLinkClick?: () => void
+}
 
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ className, onLinkClick }: SidebarProps) {
     const pathname = usePathname()
 
     return (
@@ -21,21 +23,23 @@ export function Sidebar({ className }: SidebarProps) {
                         Overview
                     </h2>
                     <div className="space-y-1">
-                        <Link href="/dashboard">
-                            <Button variant={pathname === "/dashboard" ? "secondary" : "ghost"} className="w-full justify-start">
+                        <Button variant={pathname === "/dashboard" ? "secondary" : "ghost"} className="w-full justify-start" asChild>
+                            <Link href="/dashboard" onClick={onLinkClick}>
                                 <LayoutDashboard className="mr-2 h-4 w-4" />
                                 Dashboard
-                            </Button>
-                        </Link>
-                        <Link href="/dashboard/create">
-                            <Button variant={pathname === "/dashboard/create" ? "secondary" : "ghost"} className="w-full justify-start">
+                            </Link>
+                        </Button>
+                        <Button variant={pathname === "/dashboard/create" ? "secondary" : "ghost"} className="w-full justify-start" asChild>
+                            <Link href="/dashboard/create" onClick={onLinkClick}>
                                 <Bot className="mr-2 h-4 w-4" />
                                 Create Agent
-                            </Button>
-                        </Link>
-                        <Button variant="ghost" className="w-full justify-start">
-                            <Settings className="mr-2 h-4 w-4" />
-                            Settings
+                            </Link>
+                        </Button>
+                        <Button variant={pathname === "/dashboard/settings" ? "secondary" : "ghost"} className="w-full justify-start" asChild>
+                            <Link href="/dashboard/settings" onClick={onLinkClick}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                Settings
+                            </Link>
                         </Button>
                     </div>
                 </div>
