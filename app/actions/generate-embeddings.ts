@@ -14,7 +14,6 @@ export type GenerateEmbeddingsResult = {
 export async function generateContentEmbeddings(
     url: string
 ): Promise<GenerateEmbeddingsResult> {
-    console.log("DEBUG: OPENAI_API_KEY is:", process.env.OPENAI_API_KEY?.slice(0, 10) + "...");
     try {
         // 1. Validate URL
         if (!url) {

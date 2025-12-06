@@ -176,21 +176,6 @@ export default function CreateAgentPage() {
                                 )}
                             </Button>
                         )}
-
-                        {/* Debug Button - Remove in production */}
-                        {step === "input" && (
-                            <Button
-                                variant="ghost"
-                                className="w-full text-muted-foreground"
-                                size="sm"
-                                onClick={() => {
-                                    setStep("generating")
-                                    setProgressIndex(0)
-                                }}
-                            >
-                                (Debug) Simulate Success
-                            </Button>
-                        )}
                     </div>
                 </div>
             </div>
