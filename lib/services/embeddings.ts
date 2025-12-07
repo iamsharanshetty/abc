@@ -4,11 +4,20 @@ import { config } from "../config";
 import { createClient } from "../supabase/server";
 import type { Database } from "../database.types";
 import { withRateLimit } from "./rateLimiter";
+import { logger } from "@/lib/utils/logger";
 
 type EmbeddingMetadata =
   Database["public"]["Tables"]["website_embeddings"]["Row"]["metadata"];
 type WebsiteEmbeddingInsert =
   Database["public"]["Tables"]["website_embeddings"]["Insert"];
+
+// ✅ ADD THIS NEW INTERFACE
+interface ContentSection {
+  heading?: string;
+  headingLevel?: number;
+  content: string;
+  index: number;
+}
 
 const openai = new OpenAI({
   apiKey: config.openai.apiKey,
@@ -227,20 +236,56 @@ export class EmbeddingService {
    */
   private async generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
     const embeddings: number[][] = [];
+    const batchSize = config.openai.batchSize;
+    const maxConcurrent = 3; // Process 3 batches concurrently
 
-    for (let i = 0; i < texts.length; i += config.openai.batchSize) {
-      const batch = texts.slice(i, i + config.openai.batchSize);
-
-      const batchEmbeddings = await Promise.all(
-        batch.map((text) => this.generateEmbedding(text))
-      );
-
-      embeddings.push(...batchEmbeddings);
-
-      console.log(
-        `  Generated embeddings: ${embeddings.length}/${texts.length}`
-      );
+    // Split texts into batches
+    const batches: string[][] = [];
+    for (let i = 0; i < texts.length; i += batchSize) {
+      batches.push(texts.slice(i, i + batchSize));
     }
+
+    logger.info("Starting parallel batch processing", {
+      totalTexts: texts.length,
+      totalBatches: batches.length,
+      batchSize,
+      maxConcurrent,
+    });
+
+    // Process batches with concurrency control
+    for (let i = 0; i < batches.length; i += maxConcurrent) {
+      const batchGroup = batches.slice(i, i + maxConcurrent);
+
+      logger.debug("Processing batch group", {
+        groupIndex: Math.floor(i / maxConcurrent) + 1,
+        totalGroups: Math.ceil(batches.length / maxConcurrent),
+        batchesInGroup: batchGroup.length,
+      });
+
+      // Process batches in parallel (up to maxConcurrent at a time)
+      const batchPromises = batchGroup.map(async (batch) => {
+        const batchEmbeddings = await Promise.all(
+          batch.map((text) => this.generateEmbedding(text))
+        );
+        return batchEmbeddings;
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Flatten results
+      for (const batchResult of batchResults) {
+        embeddings.push(...batchResult);
+      }
+
+      logger.debug("Batch group complete", {
+        embeddingsGenerated: embeddings.length,
+        remaining: texts.length - embeddings.length,
+      });
+    }
+
+    logger.info("All batches processed", {
+      totalEmbeddings: embeddings.length,
+    });
 
     return embeddings;
   }
@@ -263,25 +308,25 @@ export class EmbeddingService {
     }
 
     try {
-      console.log(`\n  Processing: ${pageUrl}`);
+      logger.info("Processing content", { pageUrl });
 
       // STEP 1: Smart chunking
-      console.log(`  1. Chunking content...`);
+      logger.debug("1. Chunking content...");
       const chunks = this.chunkTextSmartly(content);
-      console.log(`     Created ${chunks.length} initial chunks`);
+      logger.debug(`Created ${chunks.length} initial chunks`);
 
       // STEP 2: Deduplicate
-      console.log(`  2. Deduplicating chunks...`);
+      logger.debug("2. Deduplicating chunks...");
       const uniqueChunks = this.deduplicateChunks(chunks);
-      console.log(`     ${uniqueChunks.length} unique chunks`);
+      logger.debug(`${uniqueChunks.length} unique chunks`);
 
       // STEP 3: Filter low-value chunks
-      console.log(`  3. Filtering low-value chunks...`);
+      logger.debug("3. Filtering low-value chunks...");
       const valuableChunks = this.filterLowValueChunks(uniqueChunks);
-      console.log(`     ${valuableChunks.length} valuable chunks`);
+      logger.debug(`${valuableChunks.length} valuable chunks`);
 
       if (valuableChunks.length === 0) {
-        console.log(`  ✗ No valuable content to embed`);
+        logger.warn("No valuable content to embed");
         return {
           chunksCreated: chunks.length,
           chunksSaved: 0,
@@ -290,28 +335,44 @@ export class EmbeddingService {
       }
 
       // STEP 4: Generate embeddings
-      console.log(`  4. Generating embeddings...`);
+      logger.debug("4. Generating embeddings...");
       const embeddings = await this.generateEmbeddingsBatch(valuableChunks);
 
-      // STEP 5: Store in database
-      console.log(`  5. Storing in database...`);
+      // ✅ NEW STEP 5: Determine section for each chunk
+      logger.debug("5. Determining sections...");
+      const chunkSections = this.assignChunksToSections(
+        valuableChunks,
+        content
+      );
+
+      // STEP 6: Store in database (was step 5)
+      logger.debug("6. Storing in database...");
       const supabase = await createClient();
 
       const records: WebsiteEmbeddingInsert[] = valuableChunks.map(
-        (chunk, index) => ({
-          website_url: websiteUrl,
-          page_url: pageUrl,
-          content_section: chunk,
-          embedding: embeddings[index] as any,
-          metadata: {
-            title: metadata?.title,
-            scrapedAt: metadata?.scrapedAt || new Date().toISOString(),
-            contentLength: chunk.length,
-            chunkIndex: index,
-            totalChunks: valuableChunks.length,
-            wordCount: chunk.split(/\s+/).length,
-          } as any,
-        })
+        (chunk, index) => {
+          const embeddingVector = `[${embeddings[index].join(",")}]`;
+          const section = chunkSections[index]; // ✅ GET SECTION INFO
+
+          return {
+            website_url: websiteUrl,
+            page_url: pageUrl,
+            content_section: chunk,
+            embedding: embeddingVector,
+            metadata: {
+              title: metadata?.title,
+              scrapedAt: metadata?.scrapedAt || new Date().toISOString(),
+              contentLength: chunk.length,
+              chunkIndex: index,
+              totalChunks: valuableChunks.length,
+              wordCount: chunk.split(/\s+/).length,
+              // ✅ ADD SECTION INFORMATION
+              section: section.heading || "Introduction",
+              sectionLevel: section.headingLevel || 0,
+              sectionIndex: section.index,
+            } as any,
+          };
+        }
       );
 
       // Insert in batches
@@ -381,5 +442,63 @@ export class EmbeddingService {
         }`
       );
     }
+  }
+  /**
+   * Assign chunks to sections based on content position
+   */
+  private assignChunksToSections(
+    chunks: string[],
+    fullContent: string
+  ): ContentSection[] {
+    const sections: ContentSection[] = [];
+
+    // Try to find which section each chunk belongs to
+    // by matching chunk start with content position
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      // Find where this chunk appears in the full content
+      const chunkStart = chunk.substring(0, 50); // First 50 chars for matching
+      const position = fullContent.indexOf(chunkStart);
+
+      if (position === -1) {
+        // Chunk not found in original content, assign to default section
+        sections.push({
+          heading: "Unknown Section",
+          headingLevel: 0,
+          content: chunk,
+          index: 0,
+        });
+        continue;
+      }
+
+      // Find the heading that comes before this position
+      const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
+      let lastHeading = "";
+      let lastLevel = 0;
+      let sectionIndex = 0;
+
+      let match;
+      const contentBeforeChunk = fullContent.substring(0, position);
+
+      // Reset regex
+      headingRegex.lastIndex = 0;
+
+      // Find all headings before this chunk
+      while ((match = headingRegex.exec(contentBeforeChunk)) !== null) {
+        lastHeading = match[2].replace(/<[^>]+>/g, "").trim(); // Remove HTML tags
+        lastLevel = parseInt(match[1]);
+        sectionIndex++;
+      }
+
+      sections.push({
+        heading: lastHeading || "Introduction",
+        headingLevel: lastLevel,
+        content: chunk,
+        index: sectionIndex,
+      });
+    }
+
+    return sections;
   }
 }

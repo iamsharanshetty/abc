@@ -50,7 +50,7 @@ export class WebScraper {
   private baseUrl: string;
   private baseHostname: string;
   private contentParser: ContentParser;
-  private minQualityScore: number = 20; // Lowered from 30
+  private minQualityScore: number = config.ingestion.minQualityScore; // Lowered from 30
 
   constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
     this.baseUrl = this.normalizeUrl(baseUrl);
@@ -284,7 +284,9 @@ export class WebScraper {
       }
 
       // Rate limiting - be respectful to servers
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Increased delay
+      await new Promise((resolve) =>
+        setTimeout(resolve, config.scraping.pageWaitTime)
+      ); // Increased delay
     }
 
     console.log(`\n✓ Scraping complete:`);

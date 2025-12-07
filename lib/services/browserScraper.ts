@@ -2,6 +2,7 @@
 import puppeteer, { Browser, Page } from "puppeteer";
 import { ContentParser, ParsedContent } from "./contentParser";
 import { config } from "../config";
+import { logger } from "@/lib/utils/logger";
 
 export interface BrowserScrapedPage {
   url: string;
@@ -18,7 +19,7 @@ export class BrowserScraper {
   private baseUrl: string;
   private baseHostname: string;
   private contentParser: ContentParser;
-  private minQualityScore: number = 20; // Lowered from 30
+  private minQualityScore: number = config.ingestion.minQualityScore; // Lowered from 30
   private browser: Browser | null = null;
 
   constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
@@ -121,7 +122,7 @@ export class BrowserScraper {
     let page: Page | null = null;
 
     try {
-      console.log(`🌐 Fetching with browser: ${url}`);
+      logger.debug("Fetching with browser", { url });
 
       const browser = await this.initBrowser();
       page = await browser.newPage();
@@ -129,20 +130,19 @@ export class BrowserScraper {
       // Configure page with stealth settings
       await this.configurePage(page);
 
-      // Navigate with longer timeout and better waiting strategy
+      // Navigate with longer timeout
       try {
         await page.goto(url, {
-          waitUntil: "domcontentloaded", // Changed from networkidle2 for faster loading
-          timeout: 30000,
+          waitUntil: "domcontentloaded",
+          timeout: config.scraping.browserTimeout,
         });
       } catch (navError) {
-        console.warn(
-          `⚠️ Navigation timeout, but page may have loaded partially`
-        );
+        logger.warn("Navigation timeout, but page may have loaded partially", {
+          url,
+        });
       }
 
-      // Wait for content to appear with multiple strategies
-      // Wait for content to appear with multiple strategies
+      // Wait for content
       await Promise.race([
         page.waitForSelector("body", { timeout: 10000 }),
         page.waitForFunction("document.body.innerText.length > 100", {
@@ -150,7 +150,7 @@ export class BrowserScraper {
         }),
         new Promise((resolve) => setTimeout(resolve, 5000)),
       ]).catch(() => {
-        console.warn("⚠️ Content wait timeout, proceeding anyway");
+        logger.warn("Content wait timeout, proceeding anyway", { url });
       });
 
       // Additional wait for dynamic content
@@ -159,32 +159,26 @@ export class BrowserScraper {
       // Get the HTML after JavaScript execution
       const html = await page.content();
 
-      console.log(`  ✓ Browser fetch complete`);
-      console.log(`  HTML Length: ${html.length} characters`);
+      logger.debug("Browser fetch complete", { url, htmlLength: html.length });
 
-      // Check if we got meaningful content
-      if (html.length < 1000) {
-        console.warn(`  ⚠️ Very short HTML response (${html.length} chars)`);
-      }
-
-      // Extract visible text to check if page loaded properly
+      // Extract visible text
       const visibleText = await page.evaluate(
         () => document.body.innerText || document.body.textContent || ""
       );
-      console.log(
-        `  📝 Visible text preview: "${visibleText
-          .substring(0, 200)
-          .replace(/\s+/g, " ")}..."`
-      );
-      console.log(`  📊 Visible Text Length: ${visibleText.length} characters`);
+
+      logger.debug("Visible text extracted", {
+        url,
+        textLength: visibleText.length,
+      });
 
       if (visibleText.length < 100) {
-        console.warn(
-          `  ⚠️ Very little visible text - page may not have loaded properly`
+        logger.warn(
+          "Very little visible text - page may not have loaded properly",
+          { url }
         );
       }
 
-      // Extract all links on the page
+      // Extract all links
       const links = await page.evaluate((baseHostname) => {
         const anchors = Array.from(document.querySelectorAll("a[href]"));
         return anchors
@@ -199,18 +193,20 @@ export class BrowserScraper {
           });
       }, this.baseHostname);
 
+      // Close the page before processing content
       await page.close();
+      page = null; // Clear reference
 
       // Parse content
       const parsedContent = this.contentParser.parse(html, url);
 
       // If parsing failed, use visible text directly
       if (parsedContent.metadata.wordCount === 0 && visibleText.length > 100) {
-        console.log(
-          `  ⚠️ HTML parsing returned 0 words, using visible text directly`
+        logger.debug(
+          "HTML parsing returned 0 words, using visible text directly",
+          { url }
         );
 
-        // Override with visible text
         const cleanText = visibleText.replace(/\s+/g, " ").trim();
         const words = cleanText.split(/\s+/).filter((w) => w.length > 0);
 
@@ -219,22 +215,17 @@ export class BrowserScraper {
         parsedContent.metadata.uniqueWordRatio =
           new Set(words.map((w) => w.toLowerCase())).size / words.length;
 
-        console.log(`  ✓ Using ${words.length} words from visible text`);
+        logger.debug("Using visible text", { url, wordCount: words.length });
       }
 
       const qualityScore =
         this.contentParser.calculateQualityScore(parsedContent);
 
-      console.log(
-        `✓ Parsed ${url} - Quality: ${qualityScore}/100 - Words: ${parsedContent.metadata.wordCount}`
-      );
-
-      // If quality is very low, it might be blocked
-      if (qualityScore < 20 && visibleText.length < 200) {
-        console.warn(
-          `  ⚠️ Site appears to be blocking scraper or content didn't load`
-        );
-      }
+      logger.info("Parsed page", {
+        url,
+        quality: qualityScore,
+        words: parsedContent.metadata.wordCount,
+      });
 
       return {
         url,
@@ -245,22 +236,17 @@ export class BrowserScraper {
         qualityScore,
       };
     } catch (error) {
-      if (page) {
-        await page.close().catch(() => {});
-      }
-
-      console.error(
-        `✗ Error scraping ${url}:`,
-        error instanceof Error ? error.message : error
-      );
-
-      // Log more details about the error
-      if (error instanceof Error) {
-        console.error(`  Error type: ${error.name}`);
-        console.error(`  Error stack: ${error.stack?.split("\n")[0]}`);
-      }
-
+      logger.error("Error scraping page", { url, error });
       return null;
+    } finally {
+      // CRITICAL: Always close the page, even if errors occurred
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          logger.error("Error closing page", { url, error: closeError });
+        }
+      }
     }
   }
 
@@ -274,48 +260,65 @@ export class BrowserScraper {
     let skippedLowQuality = 0;
 
     try {
+      // Initialize browser at the start
+      await this.initBrowser();
+
       while (queue.length > 0 && pages.length < this.maxPages) {
         const url = queue.shift();
         if (!url) break;
 
-        console.log(
-          `\n[${pages.length + 1}/${this.maxPages}] Processing: ${url}`
-        );
+        logger.info(`Processing page ${pages.length + 1}/${this.maxPages}`, {
+          url,
+        });
 
-        const page = await this.scrapePage(url);
+        try {
+          const page = await this.scrapePage(url);
 
-        if (page) {
-          if (page.qualityScore >= this.minQualityScore) {
-            pages.push(page);
-            console.log(`  ✓ Added (quality: ${page.qualityScore})`);
+          if (page) {
+            if (page.qualityScore >= this.minQualityScore) {
+              pages.push(page);
+              logger.debug("Added page", { url, quality: page.qualityScore });
 
-            // Add new links to queue
-            for (const link of page.links) {
-              if (!inQueue.has(link) && !this.visited.has(link)) {
-                queue.push(link);
-                inQueue.add(link);
+              // Add new links to queue
+              for (const link of page.links) {
+                if (!inQueue.has(link) && !this.visited.has(link)) {
+                  queue.push(link);
+                  inQueue.add(link);
+                }
               }
+            } else {
+              skippedLowQuality++;
+              logger.debug("Skipped page (low quality)", {
+                url,
+                quality: page.qualityScore,
+              });
             }
-          } else {
-            skippedLowQuality++;
-            console.log(`  ✗ Skipped (low quality: ${page.qualityScore})`);
           }
+        } catch (error) {
+          logger.error("Error scraping page", { url, error });
+          // Continue with next page instead of failing entire operation
         }
 
         // Rate limiting between pages
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) =>
+          setTimeout(resolve, config.scraping.pageWaitTime)
+        );
       }
 
-      console.log(`\n✓ Browser scraping complete:`);
-      console.log(`  - Pages collected: ${pages.length}`);
-      console.log(`  - Pages visited: ${this.visited.size}`);
-      console.log(`  - Low quality skipped: ${skippedLowQuality}`);
+      logger.info("Browser scraping complete", {
+        pagesCollected: pages.length,
+        pagesVisited: this.visited.size,
+        skippedLowQuality,
+      });
+
+      return pages;
+    } catch (error) {
+      logger.error("Browser scraping failed", { error });
+      throw error;
     } finally {
-      // Always close the browser
+      // CRITICAL: Always close the browser, even if errors occurred
       await this.closeBrowser();
     }
-
-    return pages;
   }
 
   /**

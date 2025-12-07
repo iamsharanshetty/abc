@@ -151,9 +151,6 @@ export class ContentParser {
   /**
    * Extract main content using intelligent selectors with fallback
    */
-  /**
-   * Extract main content using intelligent selectors with fallback
-   */
   private extractMainContent($: cheerio.Root): string {
     // Try each content selector in priority order
     for (const selector of this.CONTENT_SELECTORS) {
