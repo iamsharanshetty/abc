@@ -8,6 +8,18 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z
     .string()
     .min(1, "Supabase anon key is required"),
+
+  // Optional configuration
+  LOG_LEVEL: z
+    .enum(["debug", "development", "production"])
+    .optional()
+    .default("development"),
+  MAX_REQUESTS_PER_MINUTE: z.string().optional().default("50"),
+  REQUEST_WINDOW_MS: z.string().optional().default("60000"),
+  MAX_PAGES_TO_SCRAPE: z.string().optional().default("50"),
+  MIN_QUALITY_SCORE: z.string().optional().default("20"),
+  CHUNK_SIZE: z.string().optional().default("1000"),
+  CHUNK_OVERLAP: z.string().optional().default("200"),
 });
 
 // Validate environment variables
@@ -17,6 +29,13 @@ function validateEnv() {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      LOG_LEVEL: process.env.LOG_LEVEL,
+      MAX_REQUESTS_PER_MINUTE: process.env.MAX_REQUESTS_PER_MINUTE,
+      REQUEST_WINDOW_MS: process.env.REQUEST_WINDOW_MS,
+      MAX_PAGES_TO_SCRAPE: process.env.MAX_PAGES_TO_SCRAPE,
+      MIN_QUALITY_SCORE: process.env.MIN_QUALITY_SCORE,
+      CHUNK_SIZE: process.env.CHUNK_SIZE,
+      CHUNK_OVERLAP: process.env.CHUNK_OVERLAP,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -48,15 +67,22 @@ export const config = {
     maxBatchSize: 1000,
   },
   ingestion: {
-    maxPages: 50,
+    maxPages: parseInt(env.MAX_PAGES_TO_SCRAPE || "50"),
     maxContentLength: 8000,
-    chunkSize: 1000,
-    chunkOverlap: 200,
+    chunkSize: parseInt(env.CHUNK_SIZE || "1000"),
+    chunkOverlap: parseInt(env.CHUNK_OVERLAP || "200"),
     maxConcurrentRequests: 5,
+    minQualityScore: parseInt(env.MIN_QUALITY_SCORE || "20"), // NEW
   },
   rateLimit: {
-    maxRequestsPerMinute: 50,
-    requestWindow: 60000,
+    maxRequestsPerMinute: parseInt(env.MAX_REQUESTS_PER_MINUTE || "50"),
+    requestWindow: parseInt(env.REQUEST_WINDOW_MS || "60000"),
+  },
+  scraping: {
+    httpTimeout: 20000, // NEW
+    browserTimeout: 30000, // NEW
+    pageWaitTime: 2000, // NEW
+    retryAttempts: 3, // NEW
   },
 } as const;
 
@@ -65,3 +91,5 @@ export type Config = typeof config;
 export type OpenAIConfig = typeof config.openai;
 export type SupabaseConfig = typeof config.supabase;
 export type IngestionConfig = typeof config.ingestion;
+export type RateLimitConfig = typeof config.rateLimit;
+export type ScrapingConfig = typeof config.scraping;
