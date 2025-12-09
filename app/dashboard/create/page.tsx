@@ -52,11 +52,11 @@ export default function CreateAgentPage() {
     }
   }, [urlFromParam]);
 
-  const [analysisResults, setAnalysisResults] = React.useState<{
-    pagesScraped: number;
-    pagesProcessed: number;
-    skippedDuplicates: number;
-  } | null>(null);
+  //   const [analysisResults, setAnalysisResults] = React.useState<{
+  //     pagesScraped: number;
+  //     pagesProcessed: number;
+  //     skippedDuplicates: number;
+  //   } | null>(null);
 
   const handleStart = async () => {
     const validationError = validateUrl(url);
@@ -70,6 +70,20 @@ export default function CreateAgentPage() {
 
     try {
       console.log("Starting analysis for URL:", url);
+
+      // Move to generating step BEFORE API call
+      setStep("generating");
+      setProgressIndex(0);
+
+      // Start progress animation
+      const progressInterval = setInterval(() => {
+        setProgressIndex((prev) => {
+          if (prev < PROGRESS_STEPS.length - 1) {
+            return prev + 1;
+          }
+          return prev;
+        });
+      }, 3000); // Progress every 3 seconds
 
       // Call the backend API endpoint
       const response = await fetch("/api/analyze", {
@@ -87,6 +101,9 @@ export default function CreateAgentPage() {
 
       const result = await response.json();
       console.log("API Response:", result);
+
+      // Stop progress animation
+      clearInterval(progressInterval);
 
       // Handle error responses
       if (!response.ok) {
@@ -106,16 +123,20 @@ export default function CreateAgentPage() {
       // Store results from API response
       if (result.data) {
         console.log("Analysis successful:", result.data);
-        setAnalysisResults({
-          pagesScraped: result.data.pagesScraped,
-          pagesProcessed: result.data.pagesProcessed,
-          skippedDuplicates: result.data.skippedDuplicates,
-        });
-      }
 
-      // Move to generating step
-      setStep("generating");
-      setProgressIndex(0);
+        // Complete the progress animation
+        setProgressIndex(PROGRESS_STEPS.length - 1);
+
+        // Wait a moment to show completion
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Store analysis results
+        setAnalysisResult(result.data);
+
+        // Move to settings step
+        setStep("settings");
+        setIsLoading(false);
+      }
     } catch (err) {
       console.error("Analysis error:", err);
       const errorMessage =
@@ -124,6 +145,7 @@ export default function CreateAgentPage() {
           : "Failed to analyze website. Please try again.";
       setError(errorMessage);
       setIsLoading(false);
+      setStep("input"); // Go back to input on error
     }
   };
 
@@ -297,7 +319,10 @@ export default function CreateAgentPage() {
                 <div className="space-y-1">
                   <h2 className="text-2xl font-semibold">Agent Created!</h2>
                   <p className="text-muted-foreground">
-                    Analyzed {analysisResult.pagesProcessed} pages successfully
+                    Analyzed{" "}
+                    {analysisResult.pagesProcessed ||
+                      analysisResult.pagesScraped}{" "}
+                    pages successfully
                   </p>
                 </div>
                 <Bot className="h-12 w-12 text-primary" />
@@ -317,7 +342,7 @@ export default function CreateAgentPage() {
                         Pages Scraped
                       </p>
                       <p className="text-2xl font-bold">
-                        {analysisResult.pagesScraped}
+                        {analysisResult.pagesScraped || 0}
                       </p>
                     </div>
                     <div>
@@ -325,10 +350,21 @@ export default function CreateAgentPage() {
                         Pages Processed
                       </p>
                       <p className="text-2xl font-bold">
-                        {analysisResult.pagesProcessed}
+                        {analysisResult.pagesProcessed || 0}
                       </p>
                     </div>
                   </div>
+
+                  {analysisResult.skippedDuplicates !== undefined && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Duplicates Skipped
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {analysisResult.skippedDuplicates}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
@@ -352,6 +388,7 @@ export default function CreateAgentPage() {
                     setStep("input");
                     setUrl("");
                     setAnalysisResult(null);
+                    setProgressIndex(0);
                   }}
                 >
                   Create Another
