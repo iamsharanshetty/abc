@@ -1,10 +1,12 @@
-// app/api/jobs/analyze-website.ts
-import { task } from "@trigger.dev/sdk/v3";
+// trigger/analyze-website.ts
+import { eventTrigger } from "@trigger.dev/sdk";
+import { client } from "./client";
 import { WebScraper } from "@/lib/services/scraper";
 import { BrowserScraper } from "@/lib/services/browserScraper";
 import { EmbeddingService } from "@/lib/services/embeddings";
 import { DeduplicationService } from "@/lib/services/deduplication";
 import { logger } from "@/lib/utils/logger";
+import { createClient } from "@/lib/supabase/server";
 
 export interface AnalyzeWebsitePayload {
   jobId: string;
@@ -30,17 +32,31 @@ export interface AnalyzeWebsiteProgress {
   error?: string;
 }
 
-// Define the Trigger.dev task
-export const analyzeWebsiteTask = task({
+// Helper function to update progress
+async function updateProgress(jobId: string, progress: AnalyzeWebsiteProgress) {
+  const supabase = await createClient();
+  await supabase.from("job_progress").upsert({
+    job_id: jobId,
+    status: progress.status,
+    progress: progress.progress,
+    message: progress.message,
+    current_step: progress.currentStep,
+    pages_scraped: progress.pagesScraped,
+    pages_processed: progress.pagesProcessed,
+    error: progress.error,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// Define the job using v3 syntax
+client.defineJob({
   id: "analyze-website",
-  maxDuration: 300, // 5 minutes max
-  retry: {
-    maxAttempts: 3,
-    minTimeoutInMs: 1000,
-    maxTimeoutInMs: 10000,
-    factor: 2,
-  },
-  run: async (payload: AnalyzeWebsitePayload, { ctx }) => {
+  name: "Analyze Website",
+  version: "1.0.0",
+  trigger: eventTrigger({
+    name: "website.analyze",
+  }),
+  run: async (payload: AnalyzeWebsitePayload, io, ctx) => {
     const {
       jobId,
       url,
@@ -49,7 +65,7 @@ export const analyzeWebsiteTask = task({
       agentRole,
     } = payload;
 
-    logger.info("Starting website analysis job", { jobId, url });
+    await io.logger.info("Starting website analysis job", { jobId, url });
 
     try {
       // Step 1: Initialize (5%)
@@ -61,6 +77,8 @@ export const analyzeWebsiteTask = task({
       });
 
       // Step 2: Scrape Website (5% -> 40%)
+      await io.logger.info("Starting scrape", { url });
+
       await updateProgress(jobId, {
         status: "scraping",
         progress: 10,
@@ -189,7 +207,7 @@ export const analyzeWebsiteTask = task({
         },
       };
     } catch (error) {
-      logger.error("Website analysis job failed", { jobId, error });
+      await io.logger.error("Website analysis job failed", { jobId, error });
 
       await updateProgress(jobId, {
         status: "failed",
@@ -203,23 +221,3 @@ export const analyzeWebsiteTask = task({
     }
   },
 });
-
-// Helper function to update progress in your database or cache
-async function updateProgress(jobId: string, progress: AnalyzeWebsiteProgress) {
-  // For now, we'll store in Supabase
-  // You can also use Redis or any other cache
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabase = await createClient();
-
-  await supabase.from("job_progress").upsert({
-    job_id: jobId,
-    status: progress.status,
-    progress: progress.progress,
-    message: progress.message,
-    current_step: progress.currentStep,
-    pages_scraped: progress.pagesScraped,
-    pages_processed: progress.pagesProcessed,
-    error: progress.error,
-    updated_at: new Date().toISOString(),
-  });
-}

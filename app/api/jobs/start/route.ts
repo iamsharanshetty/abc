@@ -1,11 +1,14 @@
 // app/api/jobs/start/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { tasks } from "@trigger.dev/sdk/v3";
-import { validateAndSanitizeUrl, validateMaxPages, validateBoolean } from "@/lib/utils/validation";
+import { client } from "@/trigger/client";
+import {
+  validateAndSanitizeUrl,
+  validateMaxPages,
+  validateBoolean,
+} from "@/lib/utils/validation";
 import { handleError } from "@/lib/errors/errorHandler";
 import { logger } from "@/lib/utils/logger";
 import { createClient } from "@/lib/supabase/server";
-import type { AnalyzeWebsitePayload } from "../analyze-website";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +23,9 @@ export async function POST(request: NextRequest) {
     const agentRole = body.agentRole || "support";
 
     // Generate unique job ID
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const jobId = `job_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
 
     // Initialize job progress in database
     const supabase = await createClient();
@@ -38,30 +43,29 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Trigger the job
-    const payload: AnalyzeWebsitePayload = {
-      jobId,
-      url,
-      maxPages,
-      useBrowser,
-      agentRole,
-    };
+    // Trigger the job using v3 API
+    const event = await client.sendEvent({
+      name: "website.analyze",
+      payload: {
+        jobId,
+        url,
+        maxPages,
+        useBrowser,
+        agentRole,
+      },
+    });
 
-    // Start the Trigger.dev task
-    const handle = await tasks.trigger("analyze-website", payload);
-
-    logger.info("Job started successfully", { jobId, triggerHandle: handle.id });
+    logger.info("Job started successfully", { jobId, eventId: event.id });
 
     return NextResponse.json({
       success: true,
       data: {
         jobId,
-        triggerJobId: handle.id,
+        triggerJobId: event.id,
         status: "queued",
         message: "Website analysis job started successfully",
       },
     });
-
   } catch (error) {
     logger.error("Failed to start job", { error });
     return handleError(error);
