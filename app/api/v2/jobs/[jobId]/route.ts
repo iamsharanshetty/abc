@@ -1,6 +1,6 @@
 // app/api/v2/jobs/[jobId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { tasks } from "@trigger.dev/sdk/v3";
+import { runs } from "@trigger.dev/sdk/v3";
 import { handleError } from "@/lib/errors/errorHandler";
 import { logger } from "@/lib/utils/logger";
 import { ValidationError } from "@/lib/errors/AppError";
@@ -18,8 +18,8 @@ export async function GET(
 
     logger.info("Fetching job status", { jobId });
 
-    // Retrieve the job run details
-    const run = await tasks.retrieve(jobId);
+    // Retrieve the job run details using runs.retrieve
+    const run = await runs.retrieve(jobId);
 
     if (!run) {
       return NextResponse.json(
@@ -35,21 +35,28 @@ export async function GET(
     }
 
     // Map Trigger.dev status to our status
-    const statusMap = {
+    const statusMap: Record<string, string> = {
       PENDING: "pending",
+      QUEUED: "pending",
       EXECUTING: "running",
+      WAITING: "running",
+      DEQUEUED: "running",
       COMPLETED: "completed",
       FAILED: "failed",
+      SYSTEM_FAILURE: "failed",
+      CRASHED: "failed",
       CANCELED: "canceled",
-    } as const;
+      EXPIRED: "failed",
+      TIMED_OUT: "failed",
+      DELAYED: "pending",
+      PENDING_VERSION: "pending",
+    };
 
     const status = statusMap[run.status] || "unknown";
 
     // Calculate progress percentage
     let progress = 0;
     if (status === "running") {
-      // Estimate progress based on time elapsed
-      // This is a rough estimate; real progress would come from job logs
       progress = 50;
     } else if (status === "completed") {
       progress = 100;
@@ -63,9 +70,16 @@ export async function GET(
         progress,
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
-        ...(run.completedAt && { completedAt: run.completedAt }),
+        ...(run.finishedAt && { completedAt: run.finishedAt }),
         ...(status === "completed" && run.output && { result: run.output }),
-        ...(status === "failed" && run.error && { error: run.error }),
+        ...(status === "failed" &&
+          run.error && {
+            error: {
+              message: run.error.message,
+              name: run.error.name,
+              stackTrace: run.error.stackTrace,
+            },
+          }),
       },
     };
 
@@ -90,8 +104,8 @@ export async function DELETE(
 
     logger.info("Canceling job", { jobId });
 
-    // Cancel the job
-    await tasks.cancel(jobId);
+    // Cancel the job using runs.cancel
+    await runs.cancel(jobId);
 
     return NextResponse.json({
       success: true,
