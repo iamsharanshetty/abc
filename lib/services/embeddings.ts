@@ -1,5 +1,5 @@
 //  OPTIMIZED VERSION
-import OpenAI from "openai";
+
 import { config } from "../config";
 import { createClient } from "../supabase/server";
 import type { Database } from "../database.types";
@@ -19,9 +19,7 @@ interface ContentSection {
   index: number;
 }
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+import { openai } from "@/lib/openai";
 
 export class EmbeddingService {
   /**
@@ -198,8 +196,7 @@ export class EmbeddingService {
         if (isRetryable) {
           const delay = config.openai.retryDelay * Math.pow(2, retryCount);
           console.warn(
-            `  Retrying embedding generation (attempt ${retryCount + 1}/${
-              config.openai.maxRetries
+            `  Retrying embedding generation (attempt ${retryCount + 1}/${config.openai.maxRetries
             }) after ${delay}ms`
           );
 
@@ -210,8 +207,7 @@ export class EmbeddingService {
 
       console.error("Error generating embedding:", error);
       throw new Error(
-        `Failed to generate embedding: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to generate embedding: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -408,8 +404,7 @@ export class EmbeddingService {
     } catch (error) {
       console.error(`Error storing embeddings for ${pageUrl}:`, error);
       throw new Error(
-        `Failed to store embeddings: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to store embeddings: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -443,8 +438,7 @@ export class EmbeddingService {
     } catch (error) {
       console.error(`Error deleting embeddings for ${websiteUrl}:`, error);
       throw new Error(
-        `Failed to delete embeddings: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to delete embeddings: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
