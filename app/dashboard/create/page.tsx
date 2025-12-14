@@ -41,6 +41,8 @@ export default function CreateAgentPage() {
   const [error, setError] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<any>(null);
+  const [currentJobId, setCurrentJobId] = React.useState<string | null>(null);
+  const pollingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Auto-start if URL is provided
   React.useEffect(() => {
@@ -52,12 +54,126 @@ export default function CreateAgentPage() {
     }
   }, [urlFromParam]);
 
-  //   const [analysisResults, setAnalysisResults] = React.useState<{
-  //     pagesScraped: number;
-  //     pagesProcessed: number;
-  //     skippedDuplicates: number;
-  //   } | null>(null);
+  // Cleanup polling interval on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
+  /**
+   * Poll job status from Trigger.dev
+   */
+  const pollJobStatus = async (jobId: string) => {
+    const maxAttempts = 60; // Poll for up to 5 minutes (60 × 5 seconds)
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        console.log(
+          `Polling job status... Attempt ${attempts + 1}/${maxAttempts}`
+        );
+
+        const response = await fetch(`/api/v2/jobs/${jobId}`);
+        const result = await response.json();
+
+        console.log("Job status response:", result);
+
+        if (!response.ok) {
+          throw new Error(
+            result.error?.message ||
+              `Failed to check job status: ${response.status}`
+          );
+        }
+
+        if (result.success) {
+          const { status, progress, result: jobResult } = result.data;
+
+          // Update progress indicator based on job progress
+          if (progress !== undefined) {
+            const stepIndex = Math.floor(
+              (progress / 100) * PROGRESS_STEPS.length
+            );
+            setProgressIndex(Math.min(stepIndex, PROGRESS_STEPS.length - 1));
+          } else if (status === "running") {
+            // Fallback: slowly increment progress if no specific progress reported
+            setProgressIndex((prev) =>
+              prev < PROGRESS_STEPS.length - 2 ? prev + 1 : prev
+            );
+          }
+
+          if (status === "completed") {
+            // ✅ Job finished successfully
+            console.log("Job completed successfully:", jobResult);
+
+            // Stop polling
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+
+            // Complete the progress animation
+            setProgressIndex(PROGRESS_STEPS.length - 1);
+
+            // Wait a moment to show completion
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            // Store analysis results
+            setAnalysisResult(jobResult);
+
+            // Move to settings step
+            setStep("settings");
+            setIsLoading(false);
+            return;
+          } else if (status === "failed") {
+            // ❌ Job failed
+            throw new Error(
+              result.data.error?.message || "Job processing failed"
+            );
+          } else if (status === "running" || status === "pending") {
+            // 🔄 Still processing
+            attempts++;
+
+            if (attempts >= maxAttempts) {
+              throw new Error(
+                "Job is taking too long to complete. Please try again with fewer pages."
+              );
+            }
+            // Continue polling (interval will call this function again)
+          } else if (status === "canceled") {
+            // 🚫 Job was canceled
+            throw new Error("Job was canceled");
+          }
+        } else {
+          throw new Error(result.error?.message || "Failed to get job status");
+        }
+      } catch (error) {
+        console.error("Error polling job status:", error);
+
+        // Stop polling on error
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to check job status";
+        setError(errorMessage);
+        setIsLoading(false);
+        setStep("input");
+      }
+    };
+
+    // Start polling immediately, then every 5 seconds
+    poll();
+    pollingIntervalRef.current = setInterval(poll, 5000);
+  };
+
+  /**
+   * Handle form submission - trigger background job
+   */
   const handleStart = async () => {
     const validationError = validateUrl(url);
     if (validationError) {
@@ -75,18 +191,9 @@ export default function CreateAgentPage() {
       setStep("generating");
       setProgressIndex(0);
 
-      // Start progress animation
-      const progressInterval = setInterval(() => {
-        setProgressIndex((prev) => {
-          if (prev < PROGRESS_STEPS.length - 1) {
-            return prev + 1;
-          }
-          return prev;
-        });
-      }, 3000); // Progress every 3 seconds
-
-      // Call the backend API endpoint
-      const response = await fetch("/api/analyze", {
+      // 1. Trigger the background job via v2 API
+      console.log("Calling /api/v2/ingest...");
+      const response = await fetch("/api/v2/ingest", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -102,9 +209,6 @@ export default function CreateAgentPage() {
       const result = await response.json();
       console.log("API Response:", result);
 
-      // Stop progress animation
-      clearInterval(progressInterval);
-
       // Handle error responses
       if (!response.ok) {
         const errorMessage =
@@ -116,27 +220,17 @@ export default function CreateAgentPage() {
 
       if (!result.success) {
         throw new Error(
-          result.error?.message || result.message || "Analysis failed"
+          result.error?.message || result.message || "Job creation failed"
         );
       }
 
-      // Store results from API response
-      if (result.data) {
-        console.log("Analysis successful:", result.data);
+      // 2. Start polling for job status
+      const jobId = result.data.jobId;
+      console.log("Job created with ID:", jobId);
+      setCurrentJobId(jobId);
 
-        // Complete the progress animation
-        setProgressIndex(PROGRESS_STEPS.length - 1);
-
-        // Wait a moment to show completion
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Store analysis results
-        setAnalysisResult(result.data);
-
-        // Move to settings step
-        setStep("settings");
-        setIsLoading(false);
-      }
+      // Start polling
+      await pollJobStatus(jobId);
     } catch (err) {
       console.error("Analysis error:", err);
       const errorMessage =
@@ -145,7 +239,42 @@ export default function CreateAgentPage() {
           : "Failed to analyze website. Please try again.";
       setError(errorMessage);
       setIsLoading(false);
-      setStep("input"); // Go back to input on error
+      setStep("input");
+    }
+  };
+
+  /**
+   * Cancel ongoing job
+   */
+  const handleCancelJob = async () => {
+    if (!currentJobId) return;
+
+    try {
+      console.log("Canceling job:", currentJobId);
+
+      const response = await fetch(`/api/v2/jobs/${currentJobId}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("Job canceled successfully");
+      }
+    } catch (error) {
+      console.error("Error canceling job:", error);
+    } finally {
+      // Stop polling
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+
+      // Reset state
+      setIsLoading(false);
+      setStep("input");
+      setProgressIndex(0);
+      setCurrentJobId(null);
     }
   };
 
@@ -277,6 +406,11 @@ export default function CreateAgentPage() {
                   Building your agent...
                 </h2>
                 <p className="text-muted-foreground">Analyzing {url}</p>
+                {currentJobId && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    Job ID: {currentJobId}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-4">
@@ -309,6 +443,17 @@ export default function CreateAgentPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+
+              {/* Cancel Button */}
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelJob}
+                  disabled={!currentJobId}
+                >
+                  Cancel Analysis
+                </Button>
               </div>
             </div>
           )}
@@ -366,6 +511,30 @@ export default function CreateAgentPage() {
                     </div>
                   )}
 
+                  {analysisResult.embeddingsCreated !== undefined && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Embeddings Created
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {analysisResult.embeddingsCreated}
+                      </p>
+                    </div>
+                  )}
+
+                  {analysisResult.scraperUsed && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Scraper Used
+                      </p>
+                      <Badge variant="outline">
+                        {analysisResult.scraperUsed === "puppeteer"
+                          ? "Browser (Puppeteer)"
+                          : "HTTP (Axios)"}
+                      </Badge>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
                       Suggested Functions
@@ -389,6 +558,7 @@ export default function CreateAgentPage() {
                     setUrl("");
                     setAnalysisResult(null);
                     setProgressIndex(0);
+                    setCurrentJobId(null);
                   }}
                 >
                   Create Another

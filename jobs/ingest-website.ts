@@ -1,8 +1,9 @@
-// jobs/ingest-website.ts
+// jobs/ingest-website.ts - UPDATED VERSION
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { WebScraper } from "@/lib/services/scraper";
 import { BrowserScraper } from "@/lib/services/browserScraper";
 import { EmbeddingService } from "@/lib/services/embeddings";
+import { DeduplicationService } from "@/lib/services/deduplication";
 
 export interface IngestWebsitePayload {
   url: string;
@@ -18,9 +19,16 @@ export interface IngestWebsiteResult {
   pagesScraped: number;
   pagesProcessed: number;
   embeddingsCreated: number;
+  skippedDuplicates: number;
+  scraperUsed: "axios" | "puppeteer";
   duration: number;
   error?: string;
-  [key: string]: unknown; // Add index signature to satisfy Trigger.dev's requirements
+  deduplication: {
+    uniquePages: number;
+    duplicatesFound: number;
+    duplicateRate: number;
+  };
+  [key: string]: unknown;
 }
 
 export const ingestWebsiteTask = task({
@@ -34,6 +42,7 @@ export const ingestWebsiteTask = task({
   },
   run: async (payload: IngestWebsitePayload): Promise<IngestWebsiteResult> => {
     const startTime = Date.now();
+    const deduplicationService = new DeduplicationService();
 
     logger.info("Starting website ingestion task", {
       url: payload.url,
@@ -84,6 +93,7 @@ export const ingestWebsiteTask = task({
       await embeddingService.deleteWebsiteEmbeddings(payload.url);
 
       let processedPages = 0;
+      let skippedDuplicates = 0;
       let totalEmbeddings = 0;
       const errors: string[] = [];
 
@@ -91,6 +101,15 @@ export const ingestWebsiteTask = task({
         const page = pages[i];
 
         if (page.content.length < 100) {
+          continue;
+        }
+
+        // Check for duplicates
+        if (
+          deduplicationService.isDuplicate(page.url, page.title, page.content)
+        ) {
+          skippedDuplicates++;
+          await logger.info(`Skipping duplicate page: ${page.url}`);
           continue;
         }
 
@@ -122,6 +141,7 @@ export const ingestWebsiteTask = task({
       }
 
       const duration = Date.now() - startTime;
+      const dedupStats = deduplicationService.getStats();
 
       await logger.info("✅ Step 3/4: Embeddings generated successfully");
       await logger.info("🎉 Step 4/4: Task completed!");
@@ -131,8 +151,11 @@ export const ingestWebsiteTask = task({
         websiteUrl: payload.url,
         pagesScraped: pages.length,
         pagesProcessed: processedPages,
+        skippedDuplicates,
         embeddingsCreated: totalEmbeddings,
+        scraperUsed,
         duration,
+        deduplication: dedupStats,
       };
 
       logger.info("Website ingestion completed", result);
@@ -150,9 +173,16 @@ export const ingestWebsiteTask = task({
         websiteUrl: payload.url,
         pagesScraped: 0,
         pagesProcessed: 0,
+        skippedDuplicates: 0,
         embeddingsCreated: 0,
+        scraperUsed: "axios",
         duration,
         error: errorMessage,
+        deduplication: {
+          uniquePages: 0,
+          duplicatesFound: 0,
+          duplicateRate: 0,
+        },
       };
 
       return failureResult;
