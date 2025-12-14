@@ -297,7 +297,8 @@ export class EmbeddingService {
     websiteUrl: string,
     pageUrl: string,
     content: string,
-    metadata?: { title?: string; scrapedAt?: string }
+    metadata?: { title?: string; scrapedAt?: string },
+    supabaseClient?: any
   ): Promise<{
     chunksCreated: number;
     chunksSaved: number;
@@ -347,7 +348,8 @@ export class EmbeddingService {
 
       // STEP 6: Store in database (was step 5)
       logger.debug("6. Storing in database...");
-      const supabase = await createClient();
+      // const supabase = await createClient();
+      const supabase = supabaseClient || (await createClient());
 
       const records: WebsiteEmbeddingInsert[] = valuableChunks.map(
         (chunk, index) => {
@@ -416,13 +418,17 @@ export class EmbeddingService {
   /**
    * Delete embeddings with error handling
    */
-  async deleteWebsiteEmbeddings(websiteUrl: string): Promise<void> {
+  async deleteWebsiteEmbeddings(
+    websiteUrl: string,
+    supabaseClient?: any // ✅ Add this parameter
+  ): Promise<void> {
     if (!websiteUrl) {
       throw new Error("Website URL is required for deletion");
     }
 
     try {
-      const supabase = await createClient();
+      // ✅ Use provided client or create new one
+      const supabase = supabaseClient || (await createClient());
 
       const { error } = await supabase
         .from("website_embeddings")

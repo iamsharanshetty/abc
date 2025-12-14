@@ -4,6 +4,7 @@ import { WebScraper } from "@/lib/services/scraper";
 import { BrowserScraper } from "@/lib/services/browserScraper";
 import { EmbeddingService } from "@/lib/services/embeddings";
 import { DeduplicationService } from "@/lib/services/deduplication";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export interface IngestWebsitePayload {
   url: string;
@@ -49,6 +50,8 @@ export const ingestWebsiteTask = task({
     });
 
     try {
+      const supabase = createServiceClient();
+      logger.info("✓ Supabase service client created");
       await logger.info("🔍 Step 1/4: Starting website scraping...");
 
       let pages;
@@ -90,8 +93,7 @@ export const ingestWebsiteTask = task({
       await logger.info("🧠 Step 2/4: Generating embeddings...");
 
       const embeddingService = new EmbeddingService();
-      await embeddingService.deleteWebsiteEmbeddings(payload.url);
-
+      await embeddingService.deleteWebsiteEmbeddings(payload.url, supabase);
       let processedPages = 0;
       let skippedDuplicates = 0;
       let totalEmbeddings = 0;
@@ -125,7 +127,8 @@ export const ingestWebsiteTask = task({
             {
               title: page.title,
               scrapedAt: new Date().toISOString(),
-            }
+            },
+            supabase // ✅ Add this parameter
           );
 
           totalEmbeddings += result.chunksSaved;
