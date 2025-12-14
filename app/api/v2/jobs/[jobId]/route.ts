@@ -5,12 +5,15 @@ import { handleError } from "@/lib/errors/errorHandler";
 import { logger } from "@/lib/utils/logger";
 import { ValidationError } from "@/lib/errors/AppError";
 
+// GET /api/v2/jobs/[jobId] - Get job status
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  context: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    // ⚠️ CRITICAL: Await params first!
+    const params = await context.params;
+    const jobId = params.jobId;
 
     if (!jobId) {
       throw new ValidationError("Job ID is required");
@@ -18,7 +21,7 @@ export async function GET(
 
     logger.info("Fetching job status", { jobId });
 
-    // Retrieve the job run details using runs.retrieve
+    // Retrieve the job run details
     const run = await runs.retrieve(jobId);
 
     if (!run) {
@@ -54,7 +57,7 @@ export async function GET(
 
     const status = statusMap[run.status] || "unknown";
 
-    // Calculate progress percentage
+    // Calculate progress
     let progress = 0;
     if (status === "running") {
       progress = 50;
@@ -90,13 +93,15 @@ export async function GET(
   }
 }
 
-// Cancel a running job
+// DELETE /api/v2/jobs/[jobId] - Cancel job
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  context: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    // ⚠️ CRITICAL: Await params first!
+    const params = await context.params;
+    const jobId = params.jobId;
 
     if (!jobId) {
       throw new ValidationError("Job ID is required");
@@ -104,7 +109,6 @@ export async function DELETE(
 
     logger.info("Canceling job", { jobId });
 
-    // Cancel the job using runs.cancel
     await runs.cancel(jobId);
 
     return NextResponse.json({
