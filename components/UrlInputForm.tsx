@@ -1,17 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, CheckCircle } from "lucide-react";
+import { ArrowRight, CheckCircle, Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card";
 import { validateUrl as importValidateUrl } from "@/lib/validation";
 
 export function UrlInputForm() {
@@ -26,7 +19,6 @@ export function UrlInputForm() {
     return importValidateUrl(value);
   };
 
-  // Check if website is already analyzed
   const checkStatus = async (websiteUrl: string) => {
     try {
       const response = await fetch(
@@ -55,80 +47,75 @@ export function UrlInputForm() {
     setError("");
     setIsChecking(true);
 
-    // First check if already analyzed
     const alreadyAnalyzed = await checkStatus(url);
     setIsChecking(false);
 
     if (alreadyAnalyzed) {
       setIsAnalyzed(true);
-      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push(`/dashboard/create?url=${encodeURIComponent(url)}`);
       }, 2000);
       return;
     }
 
-    // If not analyzed, redirect to create page to start analysis
     router.push(`/dashboard/create?url=${encodeURIComponent(url)}`);
   };
 
   if (isAnalyzed) {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardContent className="pt-6">
-          <div className="flex flex-col items-center space-y-4 py-8">
-            <CheckCircle className="h-16 w-16 text-green-500" />
-            <div className="text-center space-y-2">
-              <h3 className="text-lg font-semibold">
-                Website Already Analyzed!
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Redirecting you to the dashboard...
-              </p>
-            </div>
+      <div className="w-full max-w-2xl mx-auto p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 text-center animate-in fade-in zoom-in duration-500">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="h-16 w-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+            <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
           </div>
-        </CardContent>
-      </Card>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+            Website Already Analyzed!
+          </h3>
+          <p className="text-slate-500 dark:text-slate-400">
+            Redirecting you to the dashboard...
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>Analyze Your Website</CardTitle>
-        <CardDescription>
-          Enter your website URL to generate a comprehensive AI agent.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            placeholder="https://example.com"
-            value={url}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              if (error) setError("");
-            }}
-            error={error}
-            disabled={isLoading || isChecking}
-            autoFocus
-          />
+    <div className="w-full max-w-2xl mx-auto">
+      <form onSubmit={handleSubmit} className="relative group">
+        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <Globe className="h-5 w-5 text-slate-400 dark:text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+        </div>
+        <input
+          type="text"
+          placeholder="Enter your website URL..."
+          className="w-full h-16 pl-12 pr-40 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-lg shadow-lg shadow-slate-200/50 dark:shadow-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            if (error) setError("");
+          }}
+          disabled={isLoading || isChecking}
+          autoFocus
+        />
+        <div className="absolute right-2 top-2 bottom-2">
           <Button
             type="submit"
-            className="w-full"
+            size="lg"
+            className="h-full px-6 bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all rounded-lg"
             isLoading={isLoading || isChecking}
           >
-            {isChecking
-              ? "Checking Status..."
-              : isLoading
-              ? "Analyzing..."
-              : "Generate My Agent"}
-            {!isLoading && !isChecking && (
-              <ArrowRight className="ml-2 h-4 w-4" />
-            )}
+            {isChecking ? "Checking..." : isLoading ? "Analyzing..." : "Generate Agent"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </form>
+      {error && (
+        <p className="mt-3 text-sm text-red-500 font-medium ml-2 animate-in slide-in-from-top-1">
+          {error}
+        </p>
+      )}
+      <p className="mt-4 text-center text-sm text-slate-400 dark:text-slate-500">
+        Start by entering your company's website URL
+      </p>
+    </div>
   );
 }

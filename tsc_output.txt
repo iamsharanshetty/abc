@@ -1,0 +1,3 @@
+﻿components/MobileNav.tsx(21,45): error TS2322: Type '{ className: string; onLinkClick: () => void; }' is not assignable to type 'IntrinsicAttributes & HTMLAttributes<HTMLDivElement>'.
+  Property 'onLinkClick' does not exist on type 'IntrinsicAttributes & HTMLAttributes<HTMLDivElement>'.
+lib/actions/agents.ts(51,18): error TS18047: 'user' is possibly 'null'.

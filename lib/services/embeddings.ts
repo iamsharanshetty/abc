@@ -1,5 +1,5 @@
 //  OPTIMIZED VERSION
-import OpenAI from "openai";
+
 import { config } from "../config";
 import { createClient } from "../supabase/server";
 import type { Database } from "../database.types";
@@ -19,9 +19,7 @@ interface ContentSection {
   index: number;
 }
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+import { openai } from "@/lib/openai";
 
 export class EmbeddingService {
   /**
@@ -198,8 +196,7 @@ export class EmbeddingService {
         if (isRetryable) {
           const delay = config.openai.retryDelay * Math.pow(2, retryCount);
           console.warn(
-            `  Retrying embedding generation (attempt ${retryCount + 1}/${
-              config.openai.maxRetries
+            `  Retrying embedding generation (attempt ${retryCount + 1}/${config.openai.maxRetries
             }) after ${delay}ms`
           );
 
@@ -210,8 +207,7 @@ export class EmbeddingService {
 
       console.error("Error generating embedding:", error);
       throw new Error(
-        `Failed to generate embedding: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to generate embedding: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -297,7 +293,8 @@ export class EmbeddingService {
     websiteUrl: string,
     pageUrl: string,
     content: string,
-    metadata?: { title?: string; scrapedAt?: string }
+    metadata?: { title?: string; scrapedAt?: string },
+    supabaseClient?: any
   ): Promise<{
     chunksCreated: number;
     chunksSaved: number;
@@ -347,7 +344,8 @@ export class EmbeddingService {
 
       // STEP 6: Store in database (was step 5)
       logger.debug("6. Storing in database...");
-      const supabase = await createClient();
+      // const supabase = await createClient();
+      const supabase = supabaseClient || (await createClient());
 
       const records: WebsiteEmbeddingInsert[] = valuableChunks.map(
         (chunk, index) => {
@@ -406,8 +404,7 @@ export class EmbeddingService {
     } catch (error) {
       console.error(`Error storing embeddings for ${pageUrl}:`, error);
       throw new Error(
-        `Failed to store embeddings: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to store embeddings: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -416,13 +413,17 @@ export class EmbeddingService {
   /**
    * Delete embeddings with error handling
    */
-  async deleteWebsiteEmbeddings(websiteUrl: string): Promise<void> {
+  async deleteWebsiteEmbeddings(
+    websiteUrl: string,
+    supabaseClient?: any // ✅ Add this parameter
+  ): Promise<void> {
     if (!websiteUrl) {
       throw new Error("Website URL is required for deletion");
     }
 
     try {
-      const supabase = await createClient();
+      // ✅ Use provided client or create new one
+      const supabase = supabaseClient || (await createClient());
 
       const { error } = await supabase
         .from("website_embeddings")
@@ -437,8 +438,7 @@ export class EmbeddingService {
     } catch (error) {
       console.error(`Error deleting embeddings for ${websiteUrl}:`, error);
       throw new Error(
-        `Failed to delete embeddings: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to delete embeddings: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
