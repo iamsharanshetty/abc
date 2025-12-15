@@ -1,4 +1,4 @@
-// jobs/ingest-website.ts - UPDATED VERSION
+// jobs/ingest-website.ts - CORRECTED VERSION
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { WebScraper } from "@/lib/services/scraper";
 import { BrowserScraper } from "@/lib/services/browserScraper";
@@ -94,6 +94,7 @@ export const ingestWebsiteTask = task({
 
       const embeddingService = new EmbeddingService();
       await embeddingService.deleteWebsiteEmbeddings(payload.url, supabase);
+
       let processedPages = 0;
       let skippedDuplicates = 0;
       let totalEmbeddings = 0;
@@ -128,7 +129,7 @@ export const ingestWebsiteTask = task({
               title: page.title,
               scrapedAt: new Date().toISOString(),
             },
-            supabase // ✅ Add this parameter
+            supabase
           );
 
           totalEmbeddings += result.chunksSaved;

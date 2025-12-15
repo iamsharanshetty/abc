@@ -97,11 +97,17 @@ export default function CreateAgentPage() {
               (progress / 100) * PROGRESS_STEPS.length
             );
             setProgressIndex(Math.min(stepIndex, PROGRESS_STEPS.length - 1));
+            console.log(
+              `Progress: ${progress}% - Step ${stepIndex + 1}/${
+                PROGRESS_STEPS.length
+              }`
+            );
           } else if (status === "running") {
             // Fallback: slowly increment progress if no specific progress reported
-            setProgressIndex((prev) =>
-              prev < PROGRESS_STEPS.length - 2 ? prev + 1 : prev
-            );
+            setProgressIndex((prev) => {
+              const next = prev + 1;
+              return next < PROGRESS_STEPS.length - 1 ? next : prev;
+            });
           }
 
           if (status === "completed") {
@@ -121,7 +127,7 @@ export default function CreateAgentPage() {
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             // Store analysis results
-            setAnalysisResult(jobResult);
+            setAnalysisResult(result.data.result);
 
             // Move to settings step
             setStep("settings");
@@ -191,7 +197,7 @@ export default function CreateAgentPage() {
       setStep("generating");
       setProgressIndex(0);
 
-      // 1. Trigger the background job via v2 API
+      // ✅ ONLY call the V2 API - NOT /api/analyze
       console.log("Calling /api/v2/ingest...");
       const response = await fetch("/api/v2/ingest", {
         method: "POST",
@@ -209,7 +215,6 @@ export default function CreateAgentPage() {
       const result = await response.json();
       console.log("API Response:", result);
 
-      // Handle error responses
       if (!response.ok) {
         const errorMessage =
           result.error?.message ||
@@ -224,7 +229,7 @@ export default function CreateAgentPage() {
         );
       }
 
-      // 2. Start polling for job status
+      // Start polling for job status
       const jobId = result.data.jobId;
       console.log("Job created with ID:", jobId);
       setCurrentJobId(jobId);
