@@ -1,0 +1,310 @@
+// lib/services/errorHandlingService.ts
+import { logger } from "@/lib/utils/logger";
+
+export enum ErrorType {
+  OPENAI_API_ERROR = "OPENAI_API_ERROR",
+  RATE_LIMIT_ERROR = "RATE_LIMIT_ERROR",
+  TIMEOUT_ERROR = "TIMEOUT_ERROR",
+  VECTOR_STORE_ERROR = "VECTOR_STORE_ERROR",
+  NO_CONTEXT_FOUND = "NO_CONTEXT_FOUND",
+  VALIDATION_ERROR = "VALIDATION_ERROR",
+  UNKNOWN_ERROR = "UNKNOWN_ERROR",
+}
+
+export interface ErrorContext {
+  type: ErrorType;
+  originalError?: any;
+  userMessage: string;
+  agentId?: string;
+  sessionId?: string;
+  timestamp: string;
+  metadata?: any;
+}
+
+export class ErrorHandlingService {
+  /**
+   * Handle errors and return user-friendly messages
+   */
+  static handleChatError(
+    error: any,
+    context?: { agentId?: string; sessionId?: string }
+  ): string {
+    const errorContext: ErrorContext = {
+      type: this.classifyError(error),
+      originalError: error,
+      userMessage: "",
+      agentId: context?.agentId,
+      sessionId: context?.sessionId,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Determine user-friendly message
+    errorContext.userMessage = this.getUserFriendlyMessage(
+      errorContext.type,
+      error
+    );
+
+    // Log the error
+    this.logError(errorContext);
+
+    return errorContext.userMessage;
+  }
+
+  /**
+   * Classify error type
+   */
+  private static classifyError(error: any): ErrorType {
+    if (!error) return ErrorType.UNKNOWN_ERROR;
+
+    const errorMessage = error.message || error.toString().toLowerCase();
+    const errorCode = error.code || error.status;
+
+    // OpenAI API errors
+    if (errorMessage.includes("openai") || errorMessage.includes("api key")) {
+      return ErrorType.OPENAI_API_ERROR;
+    }
+
+    // Rate limiting
+    if (
+      errorCode === 429 ||
+      errorMessage.includes("rate limit") ||
+      errorMessage.includes("too many requests")
+    ) {
+      return ErrorType.RATE_LIMIT_ERROR;
+    }
+
+    // Timeout errors
+    if (
+      errorMessage.includes("timeout") ||
+      errorMessage.includes("timed out") ||
+      errorCode === "ETIMEDOUT"
+    ) {
+      return ErrorType.TIMEOUT_ERROR;
+    }
+
+    // Vector store / database errors
+    if (
+      errorMessage.includes("supabase") ||
+      errorMessage.includes("database") ||
+      errorMessage.includes("vector")
+    ) {
+      return ErrorType.VECTOR_STORE_ERROR;
+    }
+
+    // No context found
+    if (
+      errorMessage.includes("no context") ||
+      errorMessage.includes("no relevant")
+    ) {
+      return ErrorType.NO_CONTEXT_FOUND;
+    }
+
+    // Validation errors
+    if (
+      errorMessage.includes("validation") ||
+      errorMessage.includes("invalid")
+    ) {
+      return ErrorType.VALIDATION_ERROR;
+    }
+
+    return ErrorType.UNKNOWN_ERROR;
+  }
+
+  /**
+   * Get user-friendly error message
+   */
+  private static getUserFriendlyMessage(
+    errorType: ErrorType,
+    error: any
+  ): string {
+    const messages: Record<ErrorType, string[]> = {
+      [ErrorType.OPENAI_API_ERROR]: [
+        "I'm having trouble connecting to my AI systems right now. Please try again in a moment.",
+        "My AI capabilities are temporarily unavailable. Let me try a different approach.",
+      ],
+      [ErrorType.RATE_LIMIT_ERROR]: [
+        "I'm receiving a lot of questions right now. Please wait a moment and try again.",
+        "I need to catch my breath! Please give me a few seconds before your next question.",
+      ],
+      [ErrorType.TIMEOUT_ERROR]: [
+        "That's taking longer than expected. Let me try again - could you please rephrase your question?",
+        "The request timed out. Please try asking your question again.",
+      ],
+      [ErrorType.VECTOR_STORE_ERROR]: [
+        "I'm having trouble accessing my knowledge base right now. Please try again shortly.",
+        "There's an issue with my information retrieval system. Let me try again in a moment.",
+      ],
+      [ErrorType.NO_CONTEXT_FOUND]: [
+        "I don't have specific information about that in my knowledge base. Could you ask something else about our products or services?",
+        "I'm not able to find relevant information for that question. Is there something else I can help you with?",
+      ],
+      [ErrorType.VALIDATION_ERROR]: [
+        "I couldn't process that input. Could you please rephrase your question?",
+        "There seems to be an issue with your message format. Please try again.",
+      ],
+      [ErrorType.UNKNOWN_ERROR]: [
+        "I encountered an unexpected issue. Please try again, and if the problem persists, let me know!",
+        "Something went wrong on my end. Could you please try rephrasing your question?",
+      ],
+    };
+
+    const possibleMessages =
+      messages[errorType] || messages[ErrorType.UNKNOWN_ERROR];
+    return possibleMessages[
+      Math.floor(Math.random() * possibleMessages.length)
+    ];
+  }
+
+  /**
+   * Log error for monitoring
+   */
+  private static logError(errorContext: ErrorContext): void {
+    logger.error("Chat error occurred", {
+      type: errorContext.type,
+      userMessage: errorContext.userMessage,
+      agentId: errorContext.agentId,
+      sessionId: errorContext.sessionId,
+      timestamp: errorContext.timestamp,
+      originalError:
+        errorContext.originalError?.message ||
+        String(errorContext.originalError),
+      stack: errorContext.originalError?.stack,
+    });
+  }
+
+  /**
+   * Handle OpenAI API errors with retry logic
+   */
+  static async handleOpenAIError<T>(
+    operation: () => Promise<T>,
+    options?: {
+      maxRetries?: number;
+      retryDelay?: number;
+      context?: { agentId?: string; sessionId?: string };
+    }
+  ): Promise<T> {
+    const maxRetries = options?.maxRetries || 3;
+    const retryDelay = options?.retryDelay || 1000;
+    let lastError: any;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        const errorType = this.classifyError(error);
+
+        // Don't retry validation errors
+        if (errorType === ErrorType.VALIDATION_ERROR) {
+          throw error;
+        }
+
+        // Don't retry if not rate limit or timeout
+        if (
+          errorType !== ErrorType.RATE_LIMIT_ERROR &&
+          errorType !== ErrorType.TIMEOUT_ERROR
+        ) {
+          if (attempt === maxRetries - 1) {
+            throw error;
+          }
+        }
+
+        // Wait before retry (exponential backoff)
+        const delay = retryDelay * Math.pow(2, attempt);
+        logger.warn(
+          `Retrying operation after ${delay}ms (attempt ${
+            attempt + 1
+          }/${maxRetries})`,
+          {
+            errorType,
+            context: options?.context,
+          }
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    // All retries failed
+    throw lastError;
+  }
+
+  /**
+   * Get fallback response when AI is unavailable
+   */
+  static getFallbackResponse(agentRole: string): string {
+    const fallbacks: Record<string, string> = {
+      sales:
+        "I apologize for the technical difficulty. In the meantime, would you like me to have someone from our sales team reach out to you directly? If so, please provide your email address.",
+      support:
+        "I'm sorry I'm unable to assist right now due to a technical issue. For immediate support, please check our FAQ page or contact our support team directly.",
+      custom:
+        "I apologize for the inconvenience. While I work on resolving this issue, is there specific information I can try to help you find?",
+    };
+
+    return fallbacks[agentRole] || fallbacks.custom;
+  }
+
+  /**
+   * Validate and sanitize error messages before showing to users
+   */
+  static sanitizeErrorMessage(message: string): string {
+    // Remove sensitive information
+    const sensitivePatterns = [
+      /api[_\s]?key/gi,
+      /token/gi,
+      /password/gi,
+      /secret/gi,
+      /bearer/gi,
+      /authorization/gi,
+    ];
+
+    let sanitized = message;
+    sensitivePatterns.forEach((pattern) => {
+      sanitized = sanitized.replace(pattern, "[REDACTED]");
+    });
+
+    // Remove stack traces
+    sanitized = sanitized.split("\n")[0];
+
+    // Limit length
+    if (sanitized.length > 200) {
+      sanitized = sanitized.substring(0, 200) + "...";
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Check if error should trigger alert to development team
+   */
+  static shouldAlertTeam(errorType: ErrorType): boolean {
+    const criticalErrors = [
+      ErrorType.OPENAI_API_ERROR,
+      ErrorType.VECTOR_STORE_ERROR,
+    ];
+
+    return criticalErrors.includes(errorType);
+  }
+
+  /**
+   * Create error report for analytics
+   */
+  static createErrorReport(errorContext: ErrorContext): {
+    type: string;
+    message: string;
+    timestamp: string;
+    metadata: any;
+  } {
+    return {
+      type: errorContext.type,
+      message: this.sanitizeErrorMessage(errorContext.userMessage),
+      timestamp: errorContext.timestamp,
+      metadata: {
+        agentId: errorContext.agentId,
+        sessionId: errorContext.sessionId,
+        ...errorContext.metadata,
+      },
+    };
+  }
+}
