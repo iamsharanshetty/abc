@@ -1,71 +1,26 @@
 // lib/services/leadService.ts
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
 import { logger } from "@/lib/utils/logger";
+import { Database } from "@/lib/database.types";
 
-export interface Lead {
-  id: string;
-  agent_id: string;
-  session_id?: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  company?: string;
-  message?: string;
-  source: string;
-  status: "new" | "contacted" | "qualified" | "converted" | "lost";
-  metadata?: any;
-  created_at: string;
-  updated_at: string;
-}
+// Type alias for Lead from database
+type Lead = Database["public"]["Tables"]["leads"]["Row"];
+type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
+type LeadStatus = "new" | "contacted" | "qualified" | "converted" | "lost";
 
 export interface WebhookPayload {
   leadId: string;
   agentId: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  company?: string;
-  message?: string;
+  name: string | null;
+  email: string | null;
+  phone?: string | null;
+  company?: string | null;
+  message?: string | null;
   capturedAt: string;
   websiteUrl: string;
 }
 
 export class LeadService {
-  /**
-   * Create a new lead
-   */
-  static async createLead(leadData: Partial<Lead>): Promise<Lead> {
-    try {
-      const supabase = createServiceClient();
-
-      const { data, error } = await supabase
-        .from("leads")
-        .insert({
-          ...leadData,
-          status: leadData.status || "new",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        throw new Error(`Failed to create lead: ${error.message}`);
-      }
-
-      logger.info("Lead created successfully", {
-        leadId: data.id,
-        email: data.email,
-      });
-
-      return data;
-    } catch (error) {
-      logger.error("Error creating lead", { error, leadData });
-      throw error;
-    }
-  }
-
   /**
    * Get lead by ID
    */
@@ -86,56 +41,58 @@ export class LeadService {
 
       return data;
     } catch (error) {
-      logger.error("Error getting lead", { error, leadId });
+      logger.error("Error in getLead", { error, leadId });
       return null;
     }
   }
 
   /**
-   * Get all leads for an agent
+   * Create a new lead
    */
-  static async getAgentLeads(
-    agentId: string,
-    options?: {
-      status?: string;
-      limit?: number;
-      offset?: number;
-    }
-  ): Promise<Lead[]> {
+  static async createLead(leadData: {
+    agent_id: string;
+    session_id?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    message?: string;
+    source?: string;
+    metadata?: any;
+  }): Promise<Lead | null> {
     try {
       const supabase = await createClient();
 
-      let query = supabase
+      // Build insert object with proper types
+      const insertData: LeadInsert = {
+        agent_id: leadData.agent_id,
+        session_id: leadData.session_id || null,
+        name: leadData.name || null,
+        email: leadData.email || null,
+        phone: leadData.phone || null,
+        company: leadData.company || null,
+        message: leadData.message || null,
+        source: leadData.source || "chat",
+        status: "new",
+        metadata: leadData.metadata || null,
+      };
+
+      const { data, error } = await supabase
         .from("leads")
-        .select("*")
-        .eq("agent_id", agentId)
-        .order("created_at", { ascending: false });
-
-      if (options?.status) {
-        query = query.eq("status", options.status);
-      }
-
-      if (options?.limit) {
-        query = query.limit(options.limit);
-      }
-
-      if (options?.offset) {
-        query = query.range(
-          options.offset,
-          options.offset + (options.limit || 10) - 1
-        );
-      }
-
-      const { data, error } = await query;
+        .insert(insertData)
+        .select()
+        .single();
 
       if (error) {
-        throw new Error(`Failed to fetch leads: ${error.message}`);
+        logger.error("Error creating lead", { error, leadData });
+        return null;
       }
 
-      return data || [];
+      logger.info("Lead created successfully", { leadId: data.id });
+      return data;
     } catch (error) {
-      logger.error("Error getting agent leads", { error, agentId });
-      return [];
+      logger.error("Error in createLead", { error, leadData });
+      return null;
     }
   }
 
@@ -144,40 +101,63 @@ export class LeadService {
    */
   static async updateLeadStatus(
     leadId: string,
-    status: Lead["status"],
-    notes?: string
+    status: LeadStatus
   ): Promise<boolean> {
     try {
       const supabase = await createClient();
 
-      const updateData: any = {
-        status,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (notes) {
-        updateData.metadata = { notes };
-      }
-
       const { error } = await supabase
         .from("leads")
-        .update(updateData)
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", leadId);
 
       if (error) {
-        throw new Error(`Failed to update lead: ${error.message}`);
+        logger.error("Error updating lead status", { error, leadId, status });
+        return false;
       }
 
       logger.info("Lead status updated", { leadId, status });
       return true;
     } catch (error) {
-      logger.error("Error updating lead status", { error, leadId, status });
+      logger.error("Error in updateLeadStatus", { error, leadId });
       return false;
     }
   }
 
   /**
-   * Send lead notification via webhook
+   * Get leads for an agent
+   */
+  static async getAgentLeads(
+    agentId: string,
+    limit: number = 50
+  ): Promise<Lead[]> {
+    try {
+      const supabase = await createClient();
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("agent_id", agentId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        logger.error("Error fetching agent leads", { error, agentId });
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error("Error in getAgentLeads", { error, agentId });
+      return [];
+    }
+  }
+
+  /**
+   * Send webhook notification for captured lead
    */
   static async sendWebhookNotification(
     webhookUrl: string,
@@ -188,78 +168,158 @@ export class LeadService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": "WebRep-Lead-Notifier/1.0",
+          "User-Agent": "WebRep-LeadCapture/1.0",
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Webhook returned ${response.status}: ${response.statusText}`
-        );
+        logger.error("Webhook request failed", {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return false;
       }
 
-      logger.info("Webhook notification sent", {
+      logger.info("Webhook notification sent successfully", {
         webhookUrl,
         leadId: payload.leadId,
       });
-
       return true;
     } catch (error) {
-      logger.error("Error sending webhook notification", {
-        error,
-        webhookUrl,
-        payload,
-      });
+      logger.error("Error sending webhook notification", { error, webhookUrl });
       return false;
     }
   }
 
   /**
-   * Send email notification
+   * Send email notification for captured lead
    */
   static async sendEmailNotification(
-    toEmail: string,
-    lead: Partial<Lead>,
+    emailAddress: string,
+    lead: Lead,
     websiteUrl: string
   ): Promise<boolean> {
     try {
-      // In production, integrate with an email service like SendGrid, Resend, etc.
-      // For now, we'll log the email content
-      const emailContent = `
-New Lead Captured!
-
-From: ${lead.name || "Anonymous"} (${lead.email || "No email"})
-Website: ${websiteUrl}
-Message: ${lead.message || "No message provided"}
-
-Captured at: ${new Date().toISOString()}
-
----
-This lead was captured by WebRep AI Agent.
-`;
-
-      logger.info("Email notification prepared", {
-        toEmail,
+      // In production, integrate with your email service (SendGrid, AWS SES, etc.)
+      // For now, we'll just log the notification
+      logger.info("Email notification would be sent", {
+        to: emailAddress,
+        leadId: lead.id,
         leadEmail: lead.email,
-        content: emailContent,
+        leadName: lead.name,
       });
 
-      // TODO: Integrate actual email service
-      console.log("EMAIL TO SEND:");
-      console.log(`To: ${toEmail}`);
-      console.log(`Subject: New Lead from ${websiteUrl}`);
-      console.log(`Body: ${emailContent}`);
+      // TODO: Implement actual email sending
+      // Example with SendGrid:
+      // const sgMail = require('@sendgrid/mail');
+      // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      // await sgMail.send({
+      //   to: emailAddress,
+      //   from: 'noreply@webrep.com',
+      //   subject: `New Lead Captured - ${lead.name}`,
+      //   html: `<p>New lead from ${websiteUrl}</p>...`,
+      // });
 
       return true;
     } catch (error) {
-      logger.error("Error sending email notification", { error, toEmail });
+      logger.error("Error sending email notification", {
+        error,
+        emailAddress,
+      });
       return false;
     }
   }
 
   /**
-   * Get lead statistics
+   * Export leads to CSV
+   */
+  static async exportLeadsToCSV(agentId: string): Promise<string> {
+    try {
+      const leads = await this.getAgentLeads(agentId, 1000);
+
+      if (leads.length === 0) {
+        return "";
+      }
+
+      // Create CSV header
+      const headers = [
+        "ID",
+        "Name",
+        "Email",
+        "Phone",
+        "Company",
+        "Message",
+        "Status",
+        "Source",
+        "Created At",
+        "Updated At",
+      ];
+
+      // Create CSV rows
+      const rows = leads.map((lead) => [
+        lead.id,
+        lead.name || "",
+        lead.email || "",
+        lead.phone || "",
+        lead.company || "",
+        lead.message || "",
+        lead.status,
+        lead.source,
+        lead.created_at,
+        lead.updated_at,
+      ]);
+
+      // Combine into CSV string
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) =>
+          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+        ),
+      ].join("\n");
+
+      return csvContent;
+    } catch (error) {
+      logger.error("Error exporting leads to CSV", { error, agentId });
+      return "";
+    }
+  }
+
+  /**
+   * Get leads by status
+   */
+  static async getLeadsByStatus(
+    agentId: string,
+    status: LeadStatus
+  ): Promise<Lead[]> {
+    try {
+      const supabase = await createClient();
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("status", status)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        logger.error("Error fetching leads by status", {
+          error,
+          agentId,
+          status,
+        });
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error("Error in getLeadsByStatus", { error, agentId, status });
+      return [];
+    }
+  }
+
+  /**
+   * Get lead statistics for an agent
    */
   static async getLeadStats(agentId: string): Promise<{
     total: number;
@@ -267,7 +327,7 @@ This lead was captured by WebRep AI Agent.
     contacted: number;
     qualified: number;
     converted: number;
-    conversionRate: number;
+    lost: number;
   }> {
     try {
       const supabase = await createClient();
@@ -277,41 +337,35 @@ This lead was captured by WebRep AI Agent.
         .select("status")
         .eq("agent_id", agentId);
 
-      if (error || !data) {
-        return {
-          total: 0,
-          new: 0,
-          contacted: 0,
-          qualified: 0,
-          converted: 0,
-          conversionRate: 0,
-        };
+      if (error) {
+        logger.error("Error fetching lead stats", { error, agentId });
+        return { total: 0, new: 0, contacted: 0, qualified: 0, converted: 0, lost: 0 };
       }
 
       const stats = {
-        total: data.length,
-        new: data.filter((l) => l.status === "new").length,
-        contacted: data.filter((l) => l.status === "contacted").length,
-        qualified: data.filter((l) => l.status === "qualified").length,
-        converted: data.filter((l) => l.status === "converted").length,
-        conversionRate: 0,
-      };
-
-      if (stats.total > 0) {
-        stats.conversionRate = (stats.converted / stats.total) * 100;
-      }
-
-      return stats;
-    } catch (error) {
-      logger.error("Error getting lead stats", { error, agentId });
-      return {
-        total: 0,
+        total: data?.length || 0,
         new: 0,
         contacted: 0,
         qualified: 0,
         converted: 0,
-        conversionRate: 0,
+        lost: 0,
       };
+
+      data?.forEach((lead) => {
+        if (lead.status === "new") stats.new++;
+        else if (lead.status === "contacted") stats.contacted++;
+        else if (lead.status === "qualified") stats.qualified++;
+        else if (lead.status === "converted") stats.converted++;
+        else if (lead.status === "lost") stats.lost++;
+      });
+
+      return stats;
+    } catch (error) {
+      logger.error("Error in getLeadStats", { error, agentId });
+      return { total: 0, new: 0, contacted: 0, qualified: 0, converted: 0, lost: 0 };
     }
   }
 }
+
+// Re-export the Lead type for convenience
+export type { Lead, LeadInsert, LeadStatus };

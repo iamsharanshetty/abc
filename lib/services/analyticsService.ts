@@ -29,6 +29,7 @@ export class AnalyticsService {
     try {
       const supabase = await createClient();
 
+      // Update chat log with feedback
       const { error } = await supabase
         .from("chat_logs")
         .update({
@@ -283,11 +284,22 @@ export class AnalyticsService {
         .map((r) => r.user_message)
         .slice(0, 5);
 
+      // Get today's lead count
+      const supabase = await createClient();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: todayLeads } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("agent_id", agentId)
+        .gte("created_at", today.toISOString());
+
       return {
         date: new Date().toISOString().split("T")[0],
         conversations: analytics.totalConversations,
         messages: analytics.totalMessages,
-        leads: 0, // TODO: Add lead count for today
+        leads: todayLeads?.length || 0,
         satisfaction: analytics.satisfactionScore,
         topIssues,
       };

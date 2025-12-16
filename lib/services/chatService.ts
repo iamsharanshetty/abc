@@ -1,4 +1,4 @@
-// lib/services/chatService.ts - FIXED VERSION
+// lib/services/chatService.ts
 import { openai } from "@/lib/openai";
 import { PromptTemplateService } from "./promptTemplate";
 import { createClient } from "@/lib/supabase/server";
@@ -14,15 +14,6 @@ export interface ChatResponse {
   isLeadCapture: boolean;
   leadStage?: "initial" | "name" | "email" | "confirm";
   context?: string[];
-}
-
-// Type for match_documents result
-interface MatchDocumentsResult {
-  id: string;
-  website_url: string;
-  page_url: string;
-  content_section: string;
-  similarity: number;
 }
 
 export class ChatService {
@@ -62,7 +53,7 @@ export class ChatService {
 
       // 4. Call OpenAI API
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Cost-effective model
+        model: "gpt-4o-mini",
         messages: messages as any,
         temperature: 0.7,
         max_tokens: 500,
@@ -112,21 +103,19 @@ export class ChatService {
       // Search vector store
       const supabase = await createClient();
 
-      // ✅ FIX: Cast to any to bypass type checking temporarily
-      const { data, error } = (await (supabase as any).rpc("match_documents", {
+      const { data, error } = await supabase.rpc("match_documents", {
         query_embedding: embedding,
         match_threshold: 0.7,
         match_count: limit,
         filter_website_url: websiteUrl,
-      })) as { data: MatchDocumentsResult[] | null; error: any };
+      });
 
       if (error) {
         logger.error("Error retrieving context", { error });
         return [];
       }
 
-      // ✅ FIX: Properly typed data
-      if (!data || !Array.isArray(data)) {
+      if (!data) {
         return [];
       }
 
@@ -149,16 +138,21 @@ export class ChatService {
     try {
       const supabase = await createClient();
 
-      // ✅ FIX: Cast to any to bypass type checking temporarily
-      await (supabase as any).from("chat_logs").insert({
+      const { error } = await supabase.from("chat_logs").insert({
         agent_id: agentId,
         user_message: userMessage,
         assistant_message: assistantMessage,
         timestamp: new Date().toISOString(),
+        session_id: null,
+        user_feedback: null,
+        metadata: null,
       });
+
+      if (error) {
+        logger.error("Error inserting chat log", { error });
+      }
     } catch (error) {
       logger.error("Error logging interaction", { error });
-      // Don't throw - logging failure shouldn't break chat
     }
   }
 
@@ -183,11 +177,10 @@ export class ChatService {
       };
     }
 
-    // Check for potential injection attempts
     const dangerousPatterns = [
       /<script/i,
       /javascript:/i,
-      /on\w+\s*=/i, // Event handlers like onclick=
+      /on\w+\s*=/i,
     ];
 
     if (dangerousPatterns.some((pattern) => pattern.test(trimmed))) {

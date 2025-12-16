@@ -1,6 +1,6 @@
 // lib/services/chatService.ts
 import { openai } from "@/lib/openai";
-import { PromptTemplateService } from "./promptTemplate";
+import { PromptTemplateService } from "@/lib/services/promptTemplate";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/utils/logger";
 

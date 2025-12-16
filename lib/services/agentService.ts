@@ -39,15 +39,10 @@ export class AgentService {
     };
   }
 
-  /**
-   * Initialize agent with system prompt
-   */
   async initialize(): Promise<void> {
     try {
-      // Get website content summary
       const contentSummary = await this.getWebsiteContentSummary();
 
-      // Generate system prompt
       const promptContext: PromptContext = {
         websiteUrl: this.config.websiteUrl,
         companyName: this.extractCompanyName(this.config.websiteUrl),
@@ -61,7 +56,6 @@ export class AgentService {
         this.config.systemPrompt ||
         PromptTemplateService.generateSystemPrompt(promptContext);
 
-      // Add system message to conversation
       this.conversationState.messages.push({
         role: "system",
         content: systemPrompt,
@@ -80,29 +74,22 @@ export class AgentService {
     }
   }
 
-  /**
-   * Process user message and generate response
-   */
   async processMessage(userMessage: string): Promise<string> {
     try {
-      // Validate message
       const validation = ChatService.validateMessage(userMessage);
       if (!validation.valid) {
         return `I apologize, but ${validation.error}. Please try rephrasing your message.`;
       }
 
-      // Check if in lead capture flow
       if (this.conversationState.leadCapture) {
         return await this.handleLeadCaptureFlow(userMessage);
       }
 
-      // Add user message to conversation
       this.conversationState.messages.push({
         role: "user",
         content: userMessage,
       });
 
-      // Generate response
       const response = await ChatService.generateResponse(
         userMessage,
         this.conversationState.messages,
@@ -110,20 +97,17 @@ export class AgentService {
         this.config.websiteUrl
       );
 
-      // Add assistant message to conversation
       this.conversationState.messages.push({
         role: "assistant",
         content: response.message,
       });
 
-      // Check if lead capture should be initiated
       if (response.isLeadCapture && !this.conversationState.leadCapture) {
         this.conversationState.leadCapture = {
           stage: "initial",
           data: {},
         };
 
-        // Return lead capture prompt
         const leadPrompt =
           PromptTemplateService.generateLeadCapturePrompt("initial");
         this.conversationState.messages.push({
@@ -144,9 +128,6 @@ export class AgentService {
     }
   }
 
-  /**
-   * Handle lead capture conversation flow
-   */
   private async handleLeadCaptureFlow(userMessage: string): Promise<string> {
     if (!this.conversationState.leadCapture) {
       return "Something went wrong. Let's start over.";
@@ -156,13 +137,11 @@ export class AgentService {
 
     switch (stage) {
       case "initial":
-        // User provided name
         data.name = userMessage.trim();
         this.conversationState.leadCapture.stage = "name";
         return PromptTemplateService.generateLeadCapturePrompt("name");
 
       case "name":
-        // User provided email
         if (!this.isValidEmail(userMessage.trim())) {
           return "That doesn't look like a valid email address. Could you please provide a valid email?";
         }
@@ -171,16 +150,10 @@ export class AgentService {
         return PromptTemplateService.generateLeadCapturePrompt("email");
 
       case "email":
-        // User provided additional notes
         data.notes = userMessage.trim();
         this.conversationState.leadCapture.stage = "confirm";
-
-        // Save lead to database
         await this.captureLead(data);
-
-        // Reset lead capture state
         this.conversationState.leadCapture = undefined;
-
         return PromptTemplateService.generateLeadCapturePrompt("confirm");
 
       default:
@@ -189,9 +162,6 @@ export class AgentService {
     }
   }
 
-  /**
-   * Capture lead information to database
-   */
   private async captureLead(leadData: {
     name?: string;
     email?: string;
@@ -200,12 +170,14 @@ export class AgentService {
     try {
       const supabase = await createClient();
 
-      await supabase.from("leads").insert({
+      const { error } = await supabase.from("leads").insert({
         agent_id: this.config.id,
         session_id: this.conversationState.sessionId,
-        name: leadData.name,
-        email: leadData.email,
-        message: leadData.notes,
+        name: leadData.name || null,
+        email: leadData.email || null,
+        phone: null,
+        company: null,
+        message: leadData.notes || null,
         source: "chat",
         status: "new",
         metadata: {
@@ -213,6 +185,11 @@ export class AgentService {
           capturedAt: new Date().toISOString(),
         },
       });
+
+      if (error) {
+        logger.error("Error inserting lead", { error, leadData });
+        throw error;
+      }
 
       logger.info("Lead captured", {
         agentId: this.config.id,
@@ -224,9 +201,6 @@ export class AgentService {
     }
   }
 
-  /**
-   * Get website content summary from vector store
-   */
   private async getWebsiteContentSummary(): Promise<string> {
     try {
       const supabase = await createClient();
@@ -237,14 +211,19 @@ export class AgentService {
         .eq("website_url", this.config.websiteUrl)
         .limit(10);
 
-      if (error || !data || data.length === 0) {
+      if (error) {
+        logger.error("Error fetching website content", { error });
         return `Information from ${this.config.websiteUrl}`;
       }
 
-      // Extract titles and summaries
+      if (!data || data.length === 0) {
+        return `Information from ${this.config.websiteUrl}`;
+      }
+
       const summaries = data
         .map((item) => {
-          const title = item.metadata?.title || "Page";
+          const metadata = item.metadata as { title?: string } | null;
+          const title = metadata?.title || "Page";
           const content = item.content_section.substring(0, 200);
           return `${title}: ${content}...`;
         })
@@ -257,9 +236,6 @@ export class AgentService {
     }
   }
 
-  /**
-   * Extract company name from URL
-   */
   private extractCompanyName(url: string): string {
     try {
       const hostname = new URL(url).hostname;
@@ -271,24 +247,15 @@ export class AgentService {
     }
   }
 
-  /**
-   * Validate email format
-   */
   private isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   }
 
-  /**
-   * Generate session ID
-   */
   private generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  /**
-   * Get error response for users
-   */
   private getErrorResponse(): string {
     const responses = [
       "I apologize, but I'm having trouble processing that right now. Could you please try again?",
@@ -298,18 +265,12 @@ export class AgentService {
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
-  /**
-   * Get conversation history
-   */
   getConversationHistory(): ChatMessage[] {
     return this.conversationState.messages.filter(
       (msg) => msg.role !== "system"
     );
   }
 
-  /**
-   * Reset conversation
-   */
   resetConversation(): void {
     const systemMessage = this.conversationState.messages[0];
     this.conversationState = {
