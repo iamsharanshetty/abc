@@ -1,6 +1,7 @@
 // app/api/v2/ingest/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { tasks } from "@trigger.dev/sdk/v3";
+import { createClient } from "@/lib/supabase/server";
 import type { ingestWebsiteTask } from "@/jobs/ingest-website";
 import {
   validateAndSanitizeUrl,
@@ -30,6 +31,12 @@ export async function POST(request: NextRequest) {
       forceRefresh,
     });
 
+    // Get current user
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     // Trigger the background job
     const handle = await tasks.trigger<typeof ingestWebsiteTask>(
       "ingest-website",
@@ -38,6 +45,7 @@ export async function POST(request: NextRequest) {
         maxPages,
         useBrowser,
         forceRefresh,
+        userId: user?.id,
       }
     );
 
