@@ -47,7 +47,7 @@ jobs:
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           github-token: ${{ secrets.MY_GITHUB_TOKEN }}
-          vercel-args: '--prod'
+          vercel-args: '--prod --yes'
           vercel-org-id: ${{ env.VERCEL_ORG_ID }}
           vercel-project-id: ${{ env.VERCEL_PROJECT_ID }}
           scope: ${{ env.VERCEL_ORG_ID }}
