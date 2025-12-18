@@ -1,4 +1,12 @@
 name: Deploy to vercel staging environment on merge
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+  NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+  OPENAI_API_KEY: ${{ vars.OPENAI_API_KEY }}
+
 on:
   push:
     branches:
@@ -9,22 +17,19 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - uses: amondnet/vercel-action@v20
-        id: vercel-deploy
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          OPENAI_API_KEY: ${{ vars.OPENAI_API_KEY }}
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          vercel-args: '--prod'
-          vercel-org-id: ${{ secrets.ORG_ID}}
-          vercel-project-id: ${{ secrets.PROJECT_ID}}
-          vercel-env: |
-            NEXT_PUBLIC_SUPABASE_URL=${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-            OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
+      - name: Install dependencies
+        run: pnpm install
+      - name: 📤 Pull Vercel Environment Information
+        run: pnpm vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      
+      - name: 🏗 Build Project Artifacts
+        working-directory: . 
+        run: pnpm vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      
+      - name: 🚀 Deploy Project Artifacts to Vercel
+        run: |
+          pnpm vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} > domain.txt
+          pnpm vercel alias --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }} set `cat domain.txt` staging.alenta.ai
       - name: preview-url
         run: |
           echo ${{ steps.vercel-deploy.outputs.preview-url }}
