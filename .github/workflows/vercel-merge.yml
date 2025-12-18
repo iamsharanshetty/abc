@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Configure Git author for Vercel
+        run: |
+          git config --global user.name "hussainatalenta"
+          git config --global user.email "hussain@alenta.ai"
+      
       - uses: dkershner6/vercel-set-env-action@v3
         with:
           token: ${{ secrets.VERCEL_TOKEN }}
@@ -44,6 +49,8 @@ jobs:
         env:
           VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+          VERCEL_GIT_COMMIT_AUTHOR_NAME: hussainatalenta
+          VERCEL_GIT_COMMIT_AUTHOR_EMAIL: hussain@alenta.ai
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           github-token: ${{ secrets.MY_GITHUB_TOKEN }}
