@@ -170,7 +170,7 @@ export const ingestWebsiteTask = task({
           userId: payload.userId,
           websiteUrl: payload.url,
           metadata: {
-            pagesProcessed,
+            pagesProcessed: processedPages,
             embeddingsCreated: totalEmbeddings,
             duration,
             scraperUsed,

@@ -7,10 +7,10 @@ import { ValidationError } from "@/lib/errors/AppError";
 // GET /api/v2/agents/[agentId] - Get agent details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
 
     if (!agentId) {
       throw new ValidationError("Agent ID is required");
@@ -53,10 +53,10 @@ export async function GET(
 // PATCH /api/v2/agents/[agentId] - Update agent
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
     const body = await request.json();
 
     if (!agentId) {
@@ -86,10 +86,10 @@ export async function PATCH(
 // DELETE /api/v2/agents/[agentId] - Delete agent
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
 
     if (!agentId) {
       throw new ValidationError("Agent ID is required");
