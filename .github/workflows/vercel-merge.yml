@@ -20,19 +20,23 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: latest
+      - name: Configure Git for Vercel
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
       - name: Install dependencies
         run: pnpm install
       - name: 📤 Pull Vercel Environment Information
-        run: pnpm vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }}
       
       - name: 🏗 Build Project Artifacts
         working-directory: . 
-        run: pnpm vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }}
       
       - name: 🚀 Deploy Project Artifacts to Vercel
         run: |
-          pnpm vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} > domain.txt
+          pnpm vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }} > domain.txt
           pnpm vercel alias --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }} set `cat domain.txt` staging.alenta.ai
       - name: preview-url
         run: |
-          echo ${{ steps.vercel-deploy.outputs.preview-url }}
+          echo "Deployment URL: $(cat domain.txt)"
