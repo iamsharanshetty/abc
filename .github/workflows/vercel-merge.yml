@@ -30,14 +30,24 @@ jobs:
           TARGET_OPENAI_API_KEY: preview,development,production
           TYPE_OPENAI_API_KEY: encrypted
       
+      - name: Set Vercel environment variables
+        run: |
+          # Extract project ID and org ID from .vercel/project.json
+          PROJECT_ID=$(cat .vercel/project.json | jq -r '.projectId')
+          ORG_ID=$(cat .vercel/project.json | jq -r '.orgId')
+          echo "VERCEL_PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          echo "VERCEL_ORG_ID=$ORG_ID" >> $GITHUB_ENV
+          echo "Set VERCEL_PROJECT_ID=$PROJECT_ID"
+          echo "Set VERCEL_ORG_ID=$ORG_ID"
+      
       - uses: amondnet/vercel-action@v20
         env:
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           github-token: ${{ secrets.MY_GITHUB_TOKEN }}
           vercel-args: '--prod'
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          scope: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-org-id: ${{ env.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ env.VERCEL_PROJECT_ID }}
+          scope: ${{ env.VERCEL_ORG_ID }}
