@@ -34,6 +34,9 @@ jobs:
         run: pnpm vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }}
       
       - name: 🚀 Deploy Project Artifacts to Vercel
+        env:
+          VERCEL_GIT_COMMIT_AUTHOR_NAME: "GitHub Actions"
+          VERCEL_GIT_COMMIT_AUTHOR_EMAIL: "actions@github.com"
         run: |
           pnpm vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }} > domain.txt
           pnpm vercel alias --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }} set `cat domain.txt` staging.alenta.ai
