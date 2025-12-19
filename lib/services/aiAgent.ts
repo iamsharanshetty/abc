@@ -1,6 +1,7 @@
 // lib/services/aiAgent.ts
 import { openai } from "@/lib/openai";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { logger } from "@/lib/utils/logger";
 import { config } from "@/lib/config";
 import { LangChainService } from "./langchainService";
@@ -425,16 +426,49 @@ export class AIAgentService {
     comment?: string
   ): Promise<boolean> {
     try {
-      const supabase = await createClient();
+      // CRITICAL FIX: Import and use service client at the top of the file
+      // Change this line:
+      // const supabase = await createClient();
+      // To this:
+      // const { createServiceClient } = await import("@/lib/supabase/service");
+      const supabase = createServiceClient();
 
-      const { error } = await supabase
+      console.log("=== Submitting Feedback ===");
+      console.log("Conversation ID:", conversationId);
+      console.log("Rating:", rating);
+      console.log("Comment:", comment);
+
+      // First, check if conversation exists
+      const { data: existingConv, error: checkError } = await supabase
+        .from("conversations")
+        .select("id, agent_id")
+        .eq("id", conversationId)
+        .single();
+
+      console.log("Existing conversation found:", existingConv);
+      console.log("Check error:", checkError);
+
+      if (checkError || !existingConv) {
+        logger.error("Conversation not found for feedback", {
+          conversationId,
+          error: checkError,
+        });
+        return false;
+      }
+
+      // Update with feedback
+      const { data, error } = await supabase
         .from("conversations")
         .update({
           feedback_rating: rating,
           feedback_comment: comment || null,
           feedback_submitted_at: new Date().toISOString(),
         })
-        .eq("id", conversationId);
+        .eq("id", conversationId)
+        .select();
+
+      console.log("Update result:", data);
+      console.log("Update error:", error);
 
       if (error) {
         logger.error("Error submitting feedback", { error, conversationId });
@@ -442,9 +476,11 @@ export class AIAgentService {
       }
 
       logger.info("Feedback submitted", { conversationId, rating });
+      console.log("✅ Feedback saved successfully");
       return true;
     } catch (error) {
       logger.error("Error in submitFeedback", { error });
+      console.error("Exception in submitFeedback:", error);
       return false;
     }
   }
@@ -459,15 +495,47 @@ export class AIAgentService {
     satisfactionRate: number;
   }> {
     try {
-      const supabase = await createClient();
+      // CRITICAL FIX: Use service client instead of regular client
+      // const { createServiceClient } = await import("@/lib/supabase/service");
+      const supabase = createServiceClient();
 
+      console.log("=== Getting Feedback Stats ===");
+      console.log("Agent ID:", agentId);
+
+      // First, check if agent exists
+      const { data: agent, error: agentError } = await supabase
+        .from("agents")
+        .select("id, name")
+        .eq("id", agentId)
+        .single();
+
+      console.log("Agent found:", agent);
+      console.log("Agent error:", agentError);
+
+      if (agentError || !agent) {
+        logger.error("Agent not found for feedback stats", { agentId });
+        return {
+          totalFeedback: 0,
+          positiveCount: 0,
+          negativeCount: 0,
+          satisfactionRate: 0,
+        };
+      }
+
+      // Get all conversations with feedback for this agent
       const { data, error } = await supabase
         .from("conversations")
-        .select("feedback_rating")
+        .select("feedback_rating, id, created_at")
         .eq("agent_id", agentId)
         .not("feedback_rating", "is", null);
 
+      console.log("Feedback data found:", data);
+      console.log("Feedback count:", data?.length);
+      console.log("Feedback error:", error);
+
       if (error) {
+        logger.error("Error getting feedback stats", { error, agentId });
+        console.error("Query error:", error);
         throw error;
       }
 
@@ -479,14 +547,20 @@ export class AIAgentService {
       const satisfactionRate =
         totalFeedback > 0 ? (positiveCount / totalFeedback) * 100 : 0;
 
-      return {
+      const stats = {
         totalFeedback,
         positiveCount,
         negativeCount,
         satisfactionRate: Math.round(satisfactionRate * 100) / 100,
       };
+
+      console.log("Calculated stats:", stats);
+      logger.info("Feedback stats retrieved", { agentId, stats });
+
+      return stats;
     } catch (error) {
       logger.error("Error getting feedback stats", { error });
+      console.error("Exception in getFeedbackStats:", error);
       return {
         totalFeedback: 0,
         positiveCount: 0,
