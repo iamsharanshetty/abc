@@ -161,3 +161,41 @@ export async function getAgentStats() {
         active: data.filter(a => a.status === 'active' || a.status === 'running').length
     };
 }
+
+export async function updateAgentSettings(agentId: string, settings: any) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { success: false, error: "Unauthorized" };
+
+    // 1. Get current settings
+    const { data: agent, error: fetchError } = await supabase
+        .from("agents")
+        .select("settings")
+        .eq("id", agentId)
+        .eq("user_id", user.id)
+        .single();
+
+    if (fetchError || !agent) {
+        return { success: false, error: "Agent not found" };
+    }
+
+    // 2. Merge settings
+    const newSettings = {
+        ...(agent.settings as object),
+        ...settings
+    };
+
+    // 3. Update
+    const { error: updateError } = await supabase
+        .from("agents")
+        .update({ settings: newSettings })
+        .eq("id", agentId);
+
+    if (updateError) {
+        return { success: false, error: "Failed to update settings" };
+    }
+
+    revalidatePath("/dashboard/integrations");
+    return { success: true };
+}
