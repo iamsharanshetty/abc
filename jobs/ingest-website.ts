@@ -162,6 +162,25 @@ export const ingestWebsiteTask = task({
         deduplication: dedupStats,
       };
 
+      // ✅ Log Analytics Event
+      try {
+        const { AnalyticsService } = await import("@/lib/services/analytics");
+        await AnalyticsService.logEvent("agent_created", {
+          // simple session ID or just omit if not available in job
+          userId: payload.userId,
+          websiteUrl: payload.url,
+          metadata: {
+            pagesProcessed: processedPages,
+            embeddingsCreated: totalEmbeddings,
+            duration,
+            scraperUsed,
+          },
+        });
+      } catch (logError) {
+        // Don't fail the job if analytics fails
+        logger.error("Failed to log analytics event", { error: logError });
+      }
+
       logger.info("Website ingestion completed", result);
 
       return result;

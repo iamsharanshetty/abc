@@ -28,7 +28,7 @@ const PROGRESS_STEPS = [
   "Storing in database...",
 ];
 
-function CreateAgentContent() {
+function CreateAgentPageContent() {
   const searchParams = useSearchParams();
   const urlFromParam = searchParams.get("url");
 
@@ -583,20 +583,14 @@ function CreateAgentContent() {
   );
 }
 
-// Main component with Suspense wrapper
 export default function CreateAgentPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-      }
-    >
-      <CreateAgentContent />
+    <Suspense fallback={
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <CreateAgentPageContent />
     </Suspense>
   );
 }

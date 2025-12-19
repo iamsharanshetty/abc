@@ -1,0 +1,57 @@
+name: Deploy to vercel staging environment on merge
+
+on:
+  push:
+    branches:
+      - staging
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dkershner6/vercel-set-env-action@v3
+        with:
+          token: ${{ secrets.VERCEL_TOKEN }}
+          teamId: ${{ secrets.VERCEL_ORG_ID }}
+          projectName: webrep
+          envVariableKeys: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,OPENAI_API_KEY
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          TARGET_NEXT_PUBLIC_SUPABASE_URL: preview,development,production
+          TYPE_NEXT_PUBLIC_SUPABASE_URL: encrypted
+          
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          TARGET_NEXT_PUBLIC_SUPABASE_ANON_KEY: preview,development,production
+          TYPE_NEXT_PUBLIC_SUPABASE_ANON_KEY: encrypted
+          
+          OPENAI_API_KEY: ${{ vars.OPENAI_API_KEY }}
+          TARGET_OPENAI_API_KEY: preview,development,production
+          TYPE_OPENAI_API_KEY: encrypted
+      
+      - name: Set Vercel environment variables
+        run: |
+          # Extract project ID and org ID from .vercel/project.json
+          PROJECT_ID=$(cat .vercel/project.json | jq -r '.projectId')
+          ORG_ID=$(cat .vercel/project.json | jq -r '.orgId')
+          echo "VERCEL_PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          echo "VERCEL_ORG_ID=$ORG_ID" >> $GITHUB_ENV
+          echo "Set VERCEL_PROJECT_ID=$PROJECT_ID"
+          echo "Set VERCEL_ORG_ID=$ORG_ID"
+      
+      - uses: amondnet/vercel-action@v20
+        env:
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.MY_GITHUB_TOKEN }}
+          vercel-args: '--prod --yes'
+          vercel-org-id: ${{ env.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ env.VERCEL_PROJECT_ID }}
+          scope: ${{ env.VERCEL_ORG_ID }}
