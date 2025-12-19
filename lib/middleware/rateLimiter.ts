@@ -134,11 +134,29 @@ class APIRateLimiter {
       logger.debug("Cleaned up expired rate limit entries", { removed });
     }
   }
+
+  /**
+   * Reset rate limit for specific identifier (useful for testing)
+   */
+  reset(request: NextRequest): void {
+    const identifier = this.getIdentifier(request);
+    this.limits.delete(identifier);
+    logger.debug("Rate limit reset", { identifier });
+  }
 }
 
 // Create rate limiter instances for different endpoints
 export const analyzeRateLimiter = new APIRateLimiter(5, 60000); // 5 requests per minute
 export const statusRateLimiter = new APIRateLimiter(30, 60000); // 30 requests per minute
+export const chatRateLimiter = new APIRateLimiter(20, 60000); // 20 messages per minute
+export const feedbackRateLimiter = new APIRateLimiter(10, 60000); // 10 feedback submissions per minute
+export const leadsRateLimiter = new APIRateLimiter(30, 60000); // 30 requests per minute
+export const webhookRateLimiter = new APIRateLimiter(5, 60000); // 5 webhook tests per minute
+export const analyticsRateLimiter = new APIRateLimiter(30, 60000); // 30 requests per minute
+export const crmRateLimiter = new APIRateLimiter(10, 60000); // 10 CRM operations per minute
+export const agentTestRateLimiter = new APIRateLimiter(5, 300000); // 5 tests per 5 minutes (tests are expensive)
+
+
 
 /**
  * Rate limit middleware

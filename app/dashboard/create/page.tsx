@@ -1,6 +1,8 @@
+//app/dashboard/create/page.tsx
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, Bot, Check, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -26,7 +28,7 @@ const PROGRESS_STEPS = [
   "Storing in database...",
 ];
 
-export default function CreateAgentPage() {
+function CreateAgentContent() {
   const searchParams = useSearchParams();
   const urlFromParam = searchParams.get("url");
 
@@ -578,5 +580,23 @@ export default function CreateAgentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense wrapper
+export default function CreateAgentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <CreateAgentContent />
+    </Suspense>
   );
 }

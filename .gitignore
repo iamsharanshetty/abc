@@ -48,5 +48,6 @@ next-env.d.ts
 # app/api/debug-scraper/route.ts
 app/api/test-parser/route.ts
 app/api/chat/route.ts
+lib/services/emailService.ts
 
 .trigger
