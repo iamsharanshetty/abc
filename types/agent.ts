@@ -1,5 +1,6 @@
-// types/agent.ts - MERGED VERSION
-// Keeps your existing types + adds new ones for AI agent service
+// types/agent.ts - FIXED VERSION
+// Import URL validation from shared utility
+import { validateUrl } from "@/lib/validation";
 
 // ============================================
 // YOUR EXISTING TYPES (Keep these!)
@@ -131,7 +132,6 @@ export interface LeadData {
   conversationId: string;
 }
 
-
 /**
  * Feedback for a conversation
  */
@@ -234,6 +234,17 @@ export const getDefaultAgentSettings = (
 });
 
 /**
+ * Helper to check if a URL is valid format
+ * Uses the shared validation utility
+ */
+export const isValidUrl = (url: string): boolean => {
+  // Use the validateUrl function from lib/validation.ts
+  // If it returns an empty string, the URL is valid
+  const errorMessage = validateUrl(url);
+  return errorMessage === "";
+};
+
+/**
  * Validate agent settings
  */
 export const validateAgentSettings = (
@@ -281,18 +292,6 @@ export const validateAgentSettings = (
     valid: errors.length === 0,
     errors,
   };
-};
-
-/**
- * Helper to validate URL
- */
-const isValidUrl = (url: string): boolean => {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
 };
 
 /**
