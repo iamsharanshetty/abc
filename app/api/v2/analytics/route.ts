@@ -1,4 +1,6 @@
-// app/api/v2/analytics/route.ts
+// app/api/v2/analytics/route.ts - FIXED VERSION
+// ✅ Fixed: Database-side date grouping instead of client-side processing
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { handleError } from "@/lib/errors/errorHandler";
@@ -13,6 +15,8 @@ import {
 /**
  * GET /api/v2/analytics - Get agent analytics
  * Rate Limited: 30 requests per minute per IP
+ * 
+ * ✅ FIXED: Now uses database aggregation for date grouping
  */
 async function analyticsGetHandler(request: NextRequest) {
   try {
@@ -57,16 +61,23 @@ async function analyticsGetHandler(request: NextRequest) {
       .eq("agent_id", agentId)
       .gte("captured_at", startDate.toISOString());
 
-    // Get conversations by day
-    const { data: dailyConversations } = await supabase
-      .from("conversations")
-      .select("created_at")
-      .eq("agent_id", agentId)
-      .gte("created_at", startDate.toISOString())
-      .order("created_at", { ascending: true });
+    // ✅ FIXED: Use database aggregation for grouping by day
+    // This is MUCH faster than client-side processing
+    const { data: conversationsByDay, error: convError } = await supabase
+      .rpc("get_conversations_by_day", {
+        p_agent_id: agentId,
+        p_start_date: startDate.toISOString(),
+      });
 
-    // Group by day
-    const conversationsByDay = groupByDay(dailyConversations || []);
+    if (convError) {
+      logger.error("Error fetching conversations by day", { 
+        error: convError,
+        agentId,
+        timeRange,
+      });
+      // Return empty array if function fails, don't break entire response
+      // This allows graceful degradation
+    }
 
     // Get lead conversion rate
     const conversionRate =
@@ -98,7 +109,13 @@ async function analyticsGetHandler(request: NextRequest) {
     const aiService = new AIAgentService();
     const feedbackStats = await aiService.getFeedbackStats(agentId);
 
-    logger.info("Analytics retrieved", { agentId, timeRange });
+    logger.info("Analytics retrieved", { 
+      agentId, 
+      timeRange,
+      conversationCount,
+      leadCount,
+      conversationsByDayCount: conversationsByDay?.length || 0,
+    });
 
     return NextResponse.json({
       success: true,
@@ -116,7 +133,8 @@ async function analyticsGetHandler(request: NextRequest) {
           positive: feedbackStats.positiveCount,
           negative: feedbackStats.negativeCount,
         },
-        conversationsByDay,
+        // ✅ Now comes directly from database aggregation
+        conversationsByDay: conversationsByDay || [],
         statusBreakdown: statusBreakdown || {},
         recentConversations: recentConversations || [],
       },
@@ -129,23 +147,8 @@ async function analyticsGetHandler(request: NextRequest) {
 // Export GET with rate limiting
 export const GET = withRateLimit(analyticsRateLimiter, analyticsGetHandler);
 
-/**
- * Helper function to group conversations by day
- */
-function groupByDay(
-  conversations: Array<{ created_at: string }>
-): Array<{ date: string; count: number }> {
-  const grouped: Record<string, number> = {};
-
-  conversations.forEach((conv) => {
-    const date = new Date(conv.created_at).toISOString().split("T")[0];
-    grouped[date] = (grouped[date] || 0) + 1;
-  });
-
-  return Object.entries(grouped)
-    .map(([date, count]) => ({ date, count }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
+// ✅ REMOVED: The old client-side groupByDay function is deleted
+// It has been replaced by the database function get_conversations_by_day
 
 /**
  * POST /api/v2/analytics/export - Export analytics data
