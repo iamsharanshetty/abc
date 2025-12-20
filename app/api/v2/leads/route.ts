@@ -82,54 +82,54 @@ async function leadsPostHandler(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // First, check if agent exists (create it if it's test-agent-001)
-    let { data: agent, error: agentError } = await supabase
+    // AUTHENTICATION CHECK: Get authenticated user
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authData.user) {
+      logger.warn("Unauthorized lead creation attempt", {
+        agentId: body.agentId,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication required",
+          message: "You must be logged in to create leads",
+        },
+        { status: 401 }
+      );
+    }
+
+    const userId = authData.user.id;
+
+    // Verify agent exists and belongs to the authenticated user
+    const { data: agent, error: agentError } = await supabase
       .from("agents")
       .select("id, user_id")
       .eq("id", body.agentId)
       .single();
 
-    // If agent doesn't exist and it's the test agent, create it
-    if (agentError && body.agentId === "test-agent-001") {
-      logger.info("Creating test agent");
-
-      // Get or create a test user first
-      const { data: authData } = await supabase.auth.getUser();
-      let userId = authData?.user?.id;
-
-      // If no user, use a placeholder (in production, this should be handled differently)
-      if (!userId) {
-        // For testing purposes, create agent with a placeholder user
-        // In production, you'd require authentication
-        userId = "00000000-0000-0000-0000-000000000000"; // Placeholder
-      }
-
-      const { data: newAgent, error: createError } = await supabase
-        .from("agents")
-        .insert({
-          id: "test-agent-001",
-          name: "Test Sales Agent",
-          role: "sales",
-          status: "active",
-          user_id: userId,
-          website_url: "https://example.com",
-          settings: {
-            url: "https://example.com",
-            persona: "Professional sales assistant",
-            tone: "friendly",
-          },
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        throw new Error(`Failed to create test agent: ${createError.message}`);
-      }
-
-      agent = newAgent;
-      logger.info("Test agent created", { agentId: newAgent.id });
-    } else if (agentError) {
+    if (agentError || !agent) {
       throw new ValidationError("Agent not found");
+    }
+
+    // Verify ownership
+    if (agent.user_id !== userId) {
+      logger.warn(
+        "Attempted to create lead for agent owned by different user",
+        {
+          agentId: body.agentId,
+          requestUserId: userId,
+          agentUserId: agent.user_id,
+        }
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden",
+          message: "You don't have permission to create leads for this agent",
+        },
+        { status: 403 }
+      );
     }
 
     // Insert lead
@@ -153,7 +153,11 @@ async function leadsPostHandler(request: NextRequest) {
       throw new Error(`Database error: ${error.message}`);
     }
 
-    logger.info("Lead created", { leadId: data.id, agentId: body.agentId });
+    logger.info("Lead created", {
+      leadId: data.id,
+      agentId: body.agentId,
+      userId,
+    });
 
     return NextResponse.json(
       {
