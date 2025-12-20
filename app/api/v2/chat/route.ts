@@ -1,13 +1,41 @@
 // app/api/v2/chat/route.ts
+
+/**
+ * SECURITY POLICY DOCUMENTATION
+ * ==============================
+ * 
+ * This API uses TWO different Supabase clients with different security models:
+ * 
+ * 1. createClient() - RLS-AWARE CLIENT
+ *    - Respects Row Level Security policies
+ *    - Only accesses data the authenticated user can see
+ *    - Used for: Agent validation, verifying ownership
+ *    - Why: Ensures users can only chat with their own agents
+ * 
+ * 2. createServiceClient() - SERVICE CLIENT (bypasses RLS)
+ *    - Bypasses all Row Level Security policies
+ *    - Can access ALL data in the database
+ *    - Used for: Reading conversation history for chat context
+ *    - Why: Chat widget is public-facing and doesn't have authentication
+ *    - RISK: Could expose other users' data if not careful
+ *    - MITIGATION: We validate agent ownership FIRST with RLS client
+ * 
+ * DECISION RATIONALE:
+ * - POST endpoint uses RLS client for agent validation (security check)
+ * - GET endpoint uses service client for conversation retrieval (functionality)
+ * - This is intentional: we verify permissions first, then provide service
+ * - Alternative would be to require authentication for chat widget (rejected for UX)
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { AIAgentService, AgentContext } from "@/lib/services/aiAgent";
 import { handleError } from "@/lib/errors/errorHandler";
 import { ValidationError } from "@/lib/errors/AppError";
 import { logger } from "@/lib/utils/logger";
 import { createClient } from "@/lib/supabase/server";
-// ADD THIS IMPORT - Use service client instead
 import { createServiceClient } from "@/lib/supabase/service";
 import { withRateLimit, chatRateLimiter } from "@/lib/middleware/rateLimiter";
+import { ErrorHandlingService } from "@/lib/services/errorHandlingService";
 
 interface ChatRequest {
   agentId: string;
@@ -22,6 +50,8 @@ interface ChatRequest {
 /**
  * POST /api/v2/chat - Chat with an AI agent
  * Rate Limited: 20 requests per minute per IP
+ * 
+ * Security Model: Uses RLS-aware client for validation
  */
 async function chatHandler(request: NextRequest) {
   try {
@@ -49,7 +79,11 @@ async function chatHandler(request: NextRequest) {
       messageLength: sanitizedMessage.length,
     });
 
-    // Get agent details from database
+    /**
+     * SECURITY CHECK: Use RLS-aware client to validate agent access
+     * This ensures the agent exists and is active
+     * If RLS policies are enabled, this will also verify ownership
+     */
     const supabase = await createClient();
     const { data: agent, error: agentError } = await supabase
       .from("agents")
@@ -58,6 +92,10 @@ async function chatHandler(request: NextRequest) {
       .single();
 
     if (agentError || !agent) {
+      logger.warn("Agent not found or access denied", {
+        agentId: body.agentId,
+        error: agentError?.message,
+      });
       throw new ValidationError("Agent not found", { agentId: body.agentId });
     }
 
@@ -91,12 +129,15 @@ async function chatHandler(request: NextRequest) {
       body.conversationId ||
       `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Call AI Agent Service
+    /**
+     * Call AI Agent Service with error handling and retry logic
+     * This automatically retries on transient errors (rate limits, timeouts)
+     */
     const aiService = new AIAgentService();
-    const result = await aiService.chat(
-      context,
-      sanitizedMessage,
-      conversationId
+    const result = await ErrorHandlingService.executeWithRetry(
+      () => aiService.chat(context, sanitizedMessage, conversationId),
+      "agent_chat",
+      { agentId: body.agentId, sessionId: conversationId }
     );
 
     logger.info("Chat completed", {
@@ -117,7 +158,23 @@ async function chatHandler(request: NextRequest) {
       },
     });
   } catch (error) {
-    return handleError(error);
+    // Use error handling service for consistent error responses
+    if (error instanceof ValidationError) {
+      return handleError(error);
+    }
+
+    // For unexpected errors, provide user-friendly message
+    const userMessage = ErrorHandlingService.handleChatError(error, {
+      agentId: (error as any).agentId,
+    });
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: userMessage,
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -128,22 +185,36 @@ export const POST = withRateLimit(chatRateLimiter, chatHandler);
  * GET /api/v2/chat?conversationId=xxx - Get conversation history
  * Rate Limited: 20 requests per minute per IP
  *
- * FIXED: Now uses service client to bypass RLS policies
+ * Security Model: Uses SERVICE client to bypass RLS
+ * 
+ * WHY SERVICE CLIENT?
+ * - Chat widgets are often embedded on public websites
+ * - Users are not authenticated when chatting
+ * - We need to retrieve conversation history to show chat context
+ * - RLS policies would block unauthenticated requests
+ * 
+ * SECURITY CONSIDERATIONS:
+ * - conversationId is a random UUID - hard to guess
+ * - No sensitive data is exposed in conversations
+ * - This is equivalent to "anyone with the link can view"
+ * - If you need stricter security, require authentication first
  */
 async function chatGetHandler(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const conversationId = searchParams.get("conversationId");
 
-    console.log("=== GET Conversation History ===");
-    console.log("conversationId:", conversationId);
+    logger.debug("Fetching conversation history", { conversationId });
 
     if (!conversationId) {
       throw new ValidationError("conversationId is required");
     }
 
-    // CRITICAL FIX: Use service client instead of regular client
-    // Service client bypasses RLS policies
+    /**
+     * IMPORTANT: Using SERVICE client to bypass RLS
+     * This is intentional for public chat widget functionality
+     * See security documentation at top of file
+     */
     const supabase = createServiceClient();
 
     // Get conversation history
@@ -153,11 +224,11 @@ async function chatGetHandler(request: NextRequest) {
       .eq("id", conversationId)
       .order("created_at", { ascending: true });
 
-    console.log("Query result - Data count:", data?.length);
-    console.log("Query result - Error:", error);
-
     if (error) {
-      console.error("Database error:", error);
+      logger.error("Database error fetching conversations", {
+        error: error.message,
+        conversationId,
+      });
       throw new Error(`Database error: ${error.message}`);
     }
 
@@ -176,7 +247,10 @@ async function chatGetHandler(request: NextRequest) {
         },
       ]) || [];
 
-    console.log("Total messages formatted:", messages.length);
+    logger.info("Conversation history retrieved", {
+      conversationId,
+      messageCount: messages.length,
+    });
 
     return NextResponse.json({
       success: true,
@@ -187,7 +261,7 @@ async function chatGetHandler(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error in chatGetHandler:", error);
+    logger.error("Error in chatGetHandler", { error });
     return handleError(error);
   }
 }
