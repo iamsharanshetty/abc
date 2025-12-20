@@ -1,4 +1,3 @@
-//app/dashboard/create/page.tsx
 "use client";
 
 import * as React from "react";
@@ -19,6 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { validateUrl } from "@/lib/validation";
 import { AGENT_ROLES, AgentRole, SUGGESTED_FUNCTIONS } from "@/types/agent";
+import { logger } from "@/lib/utils/logger";
 
 const PROGRESS_STEPS = [
   "Scraping website content...",
@@ -74,14 +74,20 @@ function CreateAgentPageContent() {
 
     const poll = async () => {
       try {
-        console.log(
-          `Polling job status... Attempt ${attempts + 1}/${maxAttempts}`
-        );
+        logger.debug("Polling job status", {
+          jobId,
+          attempt: attempts + 1,
+          maxAttempts,
+        });
 
         const response = await fetch(`/api/v2/jobs/${jobId}`);
         const result = await response.json();
 
-        console.log("Job status response:", result);
+        logger.debug("Job status response received", {
+          jobId,
+          status: result.data?.status,
+          progress: result.data?.progress,
+        });
 
         if (!response.ok) {
           throw new Error(
@@ -99,11 +105,12 @@ function CreateAgentPageContent() {
               (progress / 100) * PROGRESS_STEPS.length
             );
             setProgressIndex(Math.min(stepIndex, PROGRESS_STEPS.length - 1));
-            console.log(
-              `Progress: ${progress}% - Step ${stepIndex + 1}/${
-                PROGRESS_STEPS.length
-              }`
-            );
+            logger.debug("Progress updated", {
+              jobId,
+              progress,
+              stepIndex: stepIndex + 1,
+              totalSteps: PROGRESS_STEPS.length,
+            });
           } else if (status === "running") {
             // Fallback: slowly increment progress if no specific progress reported
             setProgressIndex((prev) => {
@@ -114,7 +121,11 @@ function CreateAgentPageContent() {
 
           if (status === "completed") {
             // ✅ Job finished successfully
-            console.log("Job completed successfully:", jobResult);
+            logger.info("Job completed successfully", {
+              jobId,
+              pagesProcessed: jobResult?.pagesProcessed,
+              embeddingsCreated: jobResult?.embeddingsCreated,
+            });
 
             // Stop polling
             if (pollingIntervalRef.current) {
@@ -158,7 +169,11 @@ function CreateAgentPageContent() {
           throw new Error(result.error?.message || "Failed to get job status");
         }
       } catch (error) {
-        console.error("Error polling job status:", error);
+        logger.error("Error polling job status", {
+          jobId,
+          error: error instanceof Error ? error.message : "Unknown error",
+          attempt: attempts + 1,
+        });
 
         // Stop polling on error
         if (pollingIntervalRef.current) {
@@ -193,14 +208,14 @@ function CreateAgentPageContent() {
     setIsLoading(true);
 
     try {
-      console.log("Starting analysis for URL:", url);
+      logger.info("Starting website analysis", { url });
 
       // Move to generating step BEFORE API call
       setStep("generating");
       setProgressIndex(0);
 
       // ✅ ONLY call the V2 API - NOT /api/analyze
-      console.log("Calling /api/v2/ingest...");
+      logger.debug("Calling ingestion API", { endpoint: "/api/v2/ingest" });
       const response = await fetch("/api/v2/ingest", {
         method: "POST",
         headers: {
@@ -215,7 +230,10 @@ function CreateAgentPageContent() {
       });
 
       const result = await response.json();
-      console.log("API Response:", result);
+      logger.debug("Ingestion API response received", {
+        success: result.success,
+        jobId: result.data?.jobId,
+      });
 
       if (!response.ok) {
         const errorMessage =
@@ -233,13 +251,16 @@ function CreateAgentPageContent() {
 
       // Start polling for job status
       const jobId = result.data.jobId;
-      console.log("Job created with ID:", jobId);
+      logger.info("Background job created", { jobId, url });
       setCurrentJobId(jobId);
 
       // Start polling
       await pollJobStatus(jobId);
     } catch (err) {
-      console.error("Analysis error:", err);
+      logger.error("Website analysis failed", {
+        url,
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
       const errorMessage =
         err instanceof Error
           ? err.message
@@ -257,7 +278,7 @@ function CreateAgentPageContent() {
     if (!currentJobId) return;
 
     try {
-      console.log("Canceling job:", currentJobId);
+      logger.info("Canceling job", { jobId: currentJobId });
 
       const response = await fetch(`/api/v2/jobs/${currentJobId}`, {
         method: "DELETE",
@@ -266,10 +287,13 @@ function CreateAgentPageContent() {
       const result = await response.json();
 
       if (result.success) {
-        console.log("Job canceled successfully");
+        logger.info("Job canceled successfully", { jobId: currentJobId });
       }
     } catch (error) {
-      console.error("Error canceling job:", error);
+      logger.error("Error canceling job", {
+        jobId: currentJobId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     } finally {
       // Stop polling
       if (pollingIntervalRef.current) {
