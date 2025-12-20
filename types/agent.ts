@@ -1,4 +1,4 @@
-// types/agent.ts - FIXED VERSION
+// types/agent.ts - UPDATED VERSION with matchThreshold
 // Import URL validation from shared utility
 import { validateUrl } from "@/lib/validation";
 
@@ -22,10 +22,15 @@ export interface AgentSettings {
   crmEnabled?: boolean;
   crmType?: "hubspot" | "salesforce";
   notificationEmail?: string;
-  contextRetrievalCount?: number; // Default: 5
+  contextRetrievalCount?: number; // Default: 5, Range: 1-10
   temperature?: number; // Default: 0.7
   maxTokens?: number; // Default: 500
   customInstructions?: string;
+  
+  // ✅ NEW: Configurable vector similarity threshold for context search
+  matchThreshold?: number; // Default: 0.7, Range: 0.5-0.9
+  // Lower values (0.5-0.6) = More lenient matching, retrieves more diverse results
+  // Higher values (0.8-0.9) = Stricter matching, only very similar content
 }
 
 export interface CreateAgentResponse {
@@ -229,6 +234,7 @@ export const getDefaultAgentSettings = (
   tone: "professional",
   leadCaptureEnabled: true,
   contextRetrievalCount: 5,
+  matchThreshold: 0.7, // ✅ Added default value
   temperature: 0.7,
   maxTokens: 500,
 });
@@ -246,6 +252,7 @@ export const isValidUrl = (url: string): boolean => {
 
 /**
  * Validate agent settings
+ * ✅ UPDATED to include matchThreshold validation
  */
 export const validateAgentSettings = (
   settings: Partial<AgentSettings>
@@ -272,6 +279,14 @@ export const validateAgentSettings = (
     (settings.contextRetrievalCount < 1 || settings.contextRetrievalCount > 10)
   ) {
     errors.push("Context retrieval count must be between 1 and 10");
+  }
+
+  // ✅ NEW: Validate matchThreshold
+  if (
+    settings.matchThreshold !== undefined &&
+    (settings.matchThreshold < 0.5 || settings.matchThreshold > 0.9)
+  ) {
+    errors.push("Match threshold must be between 0.5 and 0.9");
   }
 
   if (
