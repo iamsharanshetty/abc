@@ -22,14 +22,36 @@ interface CRMSyncResult {
 }
 
 /**
+ * Configuration for retry logic
+ */
+interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number; // Base delay in ms
+  maxDelay: number; // Maximum delay in ms
+  timeout: number; // Request timeout in ms
+}
+
+/**
+ * Default retry configuration
+ */
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000, // 1 second
+  maxDelay: 10000, // 10 seconds
+  timeout: 10000, // 10 seconds
+};
+
+/**
  * CRM Integration Service
  * Currently supports HubSpot with easy extension for other CRMs
  */
 export class CRMService {
   private hubspotApiKey: string | undefined;
+  private retryConfig: RetryConfig;
 
-  constructor() {
+  constructor(retryConfig?: Partial<RetryConfig>) {
     this.hubspotApiKey = process.env.HUBSPOT_API_KEY;
+    this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
   }
 
   /**
@@ -57,7 +79,121 @@ export class CRMService {
   }
 
   /**
-   * Sync lead to HubSpot
+   * Determine if an error is retryable based on HTTP status or error type
+   */
+  private isRetryableError(error: any, statusCode?: number): boolean {
+    // Retry on network errors
+    if (error.name === "AbortError" || error.name === "TypeError") {
+      return true;
+    }
+
+    // Retry on specific HTTP status codes
+    if (statusCode) {
+      // 429: Rate limit - definitely retry
+      // 500, 502, 503, 504: Server errors - retry
+      // 408: Request timeout - retry
+      const retryableStatuses = [408, 429, 500, 502, 503, 504];
+      return retryableStatuses.includes(statusCode);
+    }
+
+    return false;
+  }
+
+  /**
+   * Calculate delay for exponential backoff
+   * For rate limits (429), use longer delays
+   */
+  private calculateDelay(attempt: number, statusCode?: number): number {
+    // For rate limits, use longer delays
+    const multiplier = statusCode === 429 ? 2 : 1;
+    const delay = Math.min(
+      this.retryConfig.baseDelay * Math.pow(2, attempt) * multiplier,
+      this.retryConfig.maxDelay
+    );
+
+    // Add jitter (random variation) to prevent thundering herd
+    const jitter = Math.random() * 0.3 * delay; // ±30% jitter
+    return delay + jitter;
+  }
+
+  /**
+   * Make HTTP request with timeout and retry logic
+   */
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    attempt: number = 0
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      this.retryConfig.timeout
+    );
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // If response is ok or not retryable, return it
+      if (response.ok || !this.isRetryableError(null, response.status)) {
+        return response;
+      }
+
+      // If we should retry
+      if (attempt < this.retryConfig.maxRetries) {
+        const delay = this.calculateDelay(attempt, response.status);
+
+        logger.warn("HubSpot API request failed, retrying", {
+          attempt: attempt + 1,
+          maxRetries: this.retryConfig.maxRetries,
+          statusCode: response.status,
+          retryInMs: Math.round(delay),
+        });
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        // Retry
+        return this.fetchWithRetry(url, options, attempt + 1);
+      }
+
+      // Max retries exceeded
+      return response;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      // Check if error is retryable
+      if (
+        this.isRetryableError(error) &&
+        attempt < this.retryConfig.maxRetries
+      ) {
+        const delay = this.calculateDelay(attempt);
+
+        logger.warn("HubSpot API request error, retrying", {
+          attempt: attempt + 1,
+          maxRetries: this.retryConfig.maxRetries,
+          error: error.message,
+          retryInMs: Math.round(delay),
+        });
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        // Retry
+        return this.fetchWithRetry(url, options, attempt + 1);
+      }
+
+      // Not retryable or max retries exceeded
+      throw error;
+    }
+  }
+
+  /**
+   * Sync lead to HubSpot with retry logic
    */
   async syncToHubSpot(
     leadData: LeadData,
@@ -98,8 +234,8 @@ Captured: ${leadData.capturedAt}`,
         agentName,
       });
 
-      // Create or update contact in HubSpot
-      const response = await fetch(
+      // Create contact in HubSpot with retry logic
+      const response = await this.fetchWithRetry(
         "https://api.hubapi.com/crm/v3/objects/contacts",
         {
           method: "POST",
@@ -141,17 +277,26 @@ Captured: ${leadData.capturedAt}`,
         success: true,
         crmContactId: result.id,
       };
-    } catch (error) {
-      logger.error("Error syncing to HubSpot", { error });
+    } catch (error: any) {
+      logger.error("Error syncing to HubSpot", { error: error.message });
+
+      // Provide specific error messages
+      if (error.name === "AbortError") {
+        return {
+          success: false,
+          error: "HubSpot API request timed out",
+        };
+      }
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error.message || "Unknown error",
       };
     }
   }
 
   /**
-   * Update existing HubSpot contact
+   * Update existing HubSpot contact with retry logic
    */
   private async updateHubSpotContact(
     email: string,
@@ -159,7 +304,7 @@ Captured: ${leadData.capturedAt}`,
   ): Promise<CRMSyncResult> {
     try {
       // First, search for the contact by email
-      const searchResponse = await fetch(
+      const searchResponse = await this.fetchWithRetry(
         `https://api.hubapi.com/crm/v3/objects/contacts/search`,
         {
           method: "POST",
@@ -201,7 +346,7 @@ Captured: ${leadData.capturedAt}`,
       const contactId = searchResult.results[0].id;
 
       // Update the contact
-      const updateResponse = await fetch(
+      const updateResponse = await this.fetchWithRetry(
         `https://api.hubapi.com/crm/v3/objects/contacts/${contactId}`,
         {
           method: "PATCH",
@@ -230,17 +375,25 @@ Captured: ${leadData.capturedAt}`,
         success: true,
         crmContactId: contactId,
       };
-    } catch (error) {
-      logger.error("Error updating HubSpot contact", { error });
+    } catch (error: any) {
+      logger.error("Error updating HubSpot contact", { error: error.message });
+
+      if (error.name === "AbortError") {
+        return {
+          success: false,
+          error: "HubSpot API request timed out",
+        };
+      }
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error.message || "Unknown error",
       };
     }
   }
 
   /**
-   * Test HubSpot connection
+   * Test HubSpot connection with retry logic
    */
   async testHubSpotConnection(): Promise<{
     success: boolean;
@@ -255,7 +408,7 @@ Captured: ${leadData.capturedAt}`,
     }
 
     try {
-      const response = await fetch(
+      const response = await this.fetchWithRetry(
         "https://api.hubapi.com/account-info/v3/details",
         {
           headers: {
@@ -276,16 +429,23 @@ Captured: ${leadData.capturedAt}`,
         success: true,
         accountName: data.portalId || "Connected",
       };
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        return {
+          success: false,
+          error: "Connection test timed out",
+        };
+      }
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error.message || "Unknown error",
       };
     }
   }
 
   /**
-   * Add note/activity to HubSpot contact
+   * Add note/activity to HubSpot contact with retry logic
    */
   async addActivityToContact(
     contactId: string,
@@ -296,7 +456,7 @@ Captured: ${leadData.capturedAt}`,
     }
 
     try {
-      const response = await fetch(
+      const response = await this.fetchWithRetry(
         "https://api.hubapi.com/crm/v3/objects/notes",
         {
           method: "POST",
@@ -334,8 +494,10 @@ Captured: ${leadData.capturedAt}`,
 
       logger.info("Activity added to HubSpot contact", { contactId });
       return true;
-    } catch (error) {
-      logger.error("Error adding activity to HubSpot", { error });
+    } catch (error: any) {
+      logger.error("Error adding activity to HubSpot", {
+        error: error.message,
+      });
       return false;
     }
   }
