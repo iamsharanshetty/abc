@@ -2,10 +2,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
-import {
-  RunnableSequence,
-  RunnablePassthrough,
-} from "@langchain/core/runnables";
+import { RunnableSequence } from "@langchain/core/runnables";
 import { config } from "@/lib/config";
 import { logger } from "@/lib/utils/logger";
 import { AgentContext } from "./aiAgent";
@@ -27,46 +24,64 @@ export class LangChainService {
   }
 
   /**
-   * Build dynamic system prompt template
+   * Build dynamic system prompt template with proper LangChain syntax
+   * All placeholders must be defined as input variables
    */
-  private buildSystemPromptTemplate(context: AgentContext): string {
-    const { role, persona, tone } = context;
+  private buildSystemPromptTemplate(context: AgentContext): {
+    template: string;
+    inputVariables: string[];
+  } {
+    const { role } = context;
 
-    let basePrompt = `You are an AI assistant for a website. Your role is: {role}.`;
+    // Build the base prompt with ALL variables as placeholders
+    let templateString = `You are an AI assistant for a website. Your role is: {role}.`;
 
-    if (persona) {
-      basePrompt += `\n\nPersona: {persona}`;
-    }
+    // Conditionally add persona section
+    templateString += `\n\nPersona: {persona}`;
 
-    if (tone) {
-      basePrompt += `\n\nTone: {tone}`;
-    }
+    // Conditionally add tone section
+    templateString += `\n\nTone: {tone}`;
 
-    // Add role-specific instructions
+    // Add role-specific instructions based on role type
     if (role === "sales") {
-      basePrompt += `\n\nYour goal is to help potential customers understand the product/service and guide them toward making a purchase. Be helpful, persuasive, and professional. When you sense interest, ask for contact information to follow up.`;
+      templateString += `\n\nYour goal is to help potential customers understand the product/service and guide them toward making a purchase. Be helpful, persuasive, and professional. When you sense interest, ask for contact information to follow up.`;
     } else if (role === "support") {
-      basePrompt += `\n\nYour goal is to help users solve problems and answer their questions about the product/service. Be patient, clear, and helpful.`;
+      templateString += `\n\nYour goal is to help users solve problems and answer their questions about the product/service. Be patient, clear, and helpful.`;
     } else if (role === "training") {
-      basePrompt += `\n\nYour goal is to educate users about how to use the product/service effectively. Be clear, instructive, and encouraging.`;
+      templateString += `\n\nYour goal is to educate users about how to use the product/service effectively. Be clear, instructive, and encouraging.`;
+    } else {
+      templateString += `\n\nYour goal is to assist users with their questions and provide helpful information.`;
     }
 
-    // Add context retrieval placeholder
-    basePrompt += `\n\nRelevant information from the website:\n{context}`;
+    // Add context retrieval section
+    templateString += `\n\nRelevant information from the website:\n{context}`;
 
     // Add lead capture instructions
-    basePrompt += `\n\nIMPORTANT: If the user expresses interest (e.g., wants a demo, quote, more information, or to purchase), politely ask for their contact information. Say something like: "I'd be happy to help you with that! Could you please share your name and email so our team can follow up with you?"`;
+    templateString += `\n\nIMPORTANT: If the user expresses interest (e.g., wants a demo, quote, more information, or to purchase), politely ask for their contact information. Say something like: "I'd be happy to help you with that! Could you please share your name and email so our team can follow up with you?"`;
 
     // Add fallback instructions
-    basePrompt += `\n\nIf you don't have information about something, politely say: "I don't have that specific information right now, but I'd be happy to connect you with someone who can help. Would you like to share your contact details?"`;
+    templateString += `\n\nIf you don't have information about something, politely say: "I don't have that specific information right now, but I'd be happy to connect you with someone who can help. Would you like to share your contact details?"`;
 
-    // Add conversation history
-    basePrompt += `\n\nPrevious conversation:\n{conversationHistory}`;
+    // Add conversation history section
+    templateString += `\n\nPrevious conversation:\n{conversationHistory}`;
 
     // Current user message
-    basePrompt += `\n\nUser: {userMessage}\n\nAssistant:`;
+    templateString += `\n\nUser: {userMessage}\n\nAssistant:`;
 
-    return basePrompt;
+    // Define all input variables that will be provided
+    const inputVariables = [
+      "role",
+      "persona",
+      "tone",
+      "context",
+      "conversationHistory",
+      "userMessage",
+    ];
+
+    return {
+      template: templateString,
+      inputVariables,
+    };
   }
 
   /**
@@ -88,19 +103,38 @@ export class LangChainService {
   }
 
   /**
-   * Create LangChain chain for agent response
+   * Get default values for optional context fields
+   */
+  private getDefaultValues(context: AgentContext): {
+    persona: string;
+    tone: string;
+  } {
+    return {
+      persona: context.persona || "Professional and helpful assistant",
+      tone: context.tone || "Friendly and informative",
+    };
+  }
+
+  /**
+   * Create LangChain chain for agent response with proper variable mapping
    */
   private createAgentChain(context: AgentContext) {
-    const systemPromptTemplate = this.buildSystemPromptTemplate(context);
+    const { template, inputVariables } = this.buildSystemPromptTemplate(context);
+    const defaults = this.getDefaultValues(context);
 
-    const promptTemplate = PromptTemplate.fromTemplate(systemPromptTemplate);
+    // Create prompt template with explicit input variables
+    const promptTemplate = new PromptTemplate({
+      template,
+      inputVariables,
+    });
 
-    // Create the chain
+    // Create the chain with proper input mapping
     const chain = RunnableSequence.from([
+      // Input transformation: map external inputs to template variables
       {
         role: () => context.role,
-        persona: () => context.persona || "Professional and helpful",
-        tone: () => context.tone || "Friendly and informative",
+        persona: () => defaults.persona,
+        tone: () => defaults.tone,
         context: (input: any) => input.context,
         conversationHistory: (input: any) => input.conversationHistory,
         userMessage: (input: any) => input.userMessage,
@@ -137,9 +171,10 @@ export class LangChainService {
       logger.debug("Invoking LangChain agent", {
         contextLength: contextText.length,
         historyLength: conversationHistoryText.length,
+        role: context.role,
       });
 
-      // Invoke the chain
+      // Invoke the chain with properly mapped inputs
       const response = await chain.invoke({
         context: contextText,
         conversationHistory: conversationHistoryText,
@@ -173,7 +208,7 @@ export class LangChainService {
         context.conversationHistory
       );
 
-      // Batch invoke
+      // Batch invoke with properly formatted inputs
       const inputs = questions.map((question) => ({
         context: contextText,
         conversationHistory: conversationHistoryText,
