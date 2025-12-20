@@ -7,6 +7,7 @@ import { config } from "@/lib/config";
 import { LangChainService } from "./langchainService";
 import { CRMService } from "./crmService";
 import type { AgentSettings, LeadData } from "@/types/agent";
+import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -91,56 +92,236 @@ export class AIAgentService {
    */
   private extractLeadData(message: string): Partial<LeadData> | null {
     const leadData: Partial<LeadData> = {};
+    let hasValidData = false;
 
-    // Email regex
-    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+    // ===== EMAIL VALIDATION (More Strict) =====
+    // Enhanced email regex that follows RFC 5322 more closely
+    const emailRegex =
+      /\b[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z]{2,})+\b/g;
     const emails = message.match(emailRegex);
+
     if (emails && emails.length > 0) {
-      leadData.email = emails[0];
+      // Additional validation: check for common invalid patterns
+      const email = emails[0].toLowerCase();
+
+      // Reject obviously fake emails
+      const fakePatterns = [
+        /test@/i,
+        /example@/i,
+        /sample@/i,
+        /fake@/i,
+        /noemail@/i,
+        /@test\./i,
+        /@example\./i,
+      ];
+
+      const isFake = fakePatterns.some((pattern) => pattern.test(email));
+
+      if (!isFake && email.includes("@") && email.includes(".")) {
+        leadData.email = email;
+        hasValidData = true;
+        logger.debug("Valid email extracted", { email });
+      }
     }
 
-    // Phone regex (basic)
-    const phoneRegex =
-      /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-    const phones = message.match(phoneRegex);
-    if (phones && phones.length > 0) {
-      leadData.phone = phones[0];
+    // ===== PHONE VALIDATION (Using Library) =====
+    try {
+      // Try to find any phone-like patterns
+      const phonePatterns = [
+        // North American format: +1 (123) 456-7890, 123-456-7890, (123) 456-7890
+        /(?:\+1\s?)?(?:\([0-9]{3}\)|[0-9]{3})[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g,
+        // International format: +XX XXX XXX XXXX
+        /\+[0-9]{1,3}[\s.-]?(?:\([0-9]{1,4}\)|[0-9]{1,4})[\s.-]?[0-9]{3,4}[\s.-]?[0-9]{3,4}/g,
+        // Simple 10-digit: 1234567890
+        /\b[0-9]{10,11}\b/g,
+      ];
+
+      let bestPhoneMatch: string | null = null;
+
+      for (const pattern of phonePatterns) {
+        const matches = message.match(pattern);
+        if (matches && matches.length > 0) {
+          // Validate with libphonenumber-js
+          for (const match of matches) {
+            try {
+              // Try parsing without country code first (assume US)
+              if (isValidPhoneNumber(match, "US")) {
+                const phoneNumber = parsePhoneNumber(match, "US");
+                bestPhoneMatch = phoneNumber.formatInternational();
+                break;
+              }
+              // Try parsing with country code
+              if (isValidPhoneNumber(match)) {
+                const phoneNumber = parsePhoneNumber(match);
+                bestPhoneMatch = phoneNumber.formatInternational();
+                break;
+              }
+            } catch (e) {
+              // Continue to next match
+              continue;
+            }
+          }
+          if (bestPhoneMatch) break;
+        }
+      }
+
+      if (bestPhoneMatch) {
+        leadData.phone = bestPhoneMatch;
+        hasValidData = true;
+        logger.debug("Valid phone extracted", { phone: bestPhoneMatch });
+      }
+    } catch (error) {
+      logger.warn("Error during phone number extraction", { error });
     }
 
-    // Name detection (very basic - looks for "my name is" or "I'm")
-    const nameRegex =
-      /(?:my name is|i'm|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i;
-    const nameMatch = message.match(nameRegex);
-    if (nameMatch) {
-      leadData.name = nameMatch[1];
+    // ===== NAME EXTRACTION (Improved with multiple patterns) =====
+    const namePatterns = [
+      // "My name is John Doe" or "I'm John Doe"
+      /(?:my name is|i'm|i am|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i,
+      // "John Doe here" or "John Doe speaking"
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})(?:\s+here|\s+speaking)/i,
+      // Email-based name extraction (first.last@domain)
+      /^([a-z]+)\.([a-z]+)@/i,
+    ];
+
+    for (const pattern of namePatterns) {
+      const nameMatch = message.match(pattern);
+      if (nameMatch) {
+        let extractedName = nameMatch[1];
+
+        // If email pattern, combine first and last name
+        if (pattern.toString().includes("@")) {
+          extractedName = `${nameMatch[1]} ${nameMatch[2]}`;
+          // Capitalize each word
+          extractedName = extractedName
+            .split(" ")
+            .map(
+              (word) =>
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            )
+            .join(" ");
+        }
+
+        // Validate: name should be 2-50 characters and contain only letters and spaces
+        if (
+          extractedName.length >= 2 &&
+          extractedName.length <= 50 &&
+          /^[A-Za-z\s]+$/.test(extractedName)
+        ) {
+          leadData.name = extractedName.trim();
+          hasValidData = true;
+          logger.debug("Valid name extracted", { name: extractedName });
+          break;
+        }
+      }
     }
 
-    return Object.keys(leadData).length > 0 ? leadData : null;
+    // If email was extracted but no name, try to extract name from email
+    if (leadData.email && !leadData.name) {
+      const emailLocalPart = leadData.email.split("@")[0];
+
+      // Check if email local part looks like a name (contains dot or has multiple capitals)
+      if (emailLocalPart.includes(".") || /[A-Z].*[A-Z]/.test(emailLocalPart)) {
+        const nameParts = emailLocalPart
+          .split(/[._-]/)
+          .map(
+            (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+          )
+          .filter((part) => part.length > 1);
+
+        if (nameParts.length >= 2) {
+          leadData.name = nameParts.slice(0, 2).join(" ");
+          logger.debug("Name extracted from email", { name: leadData.name });
+        }
+      }
+    }
+
+    // ===== COMPANY EXTRACTION =====
+    const companyPatterns = [
+      /(?:i work at|i'm from|i represent|my company is|company:)\s+([A-Z][A-Za-z0-9\s&.,'-]+(?:Inc|LLC|Ltd|Corporation|Corp)?)/i,
+      /(?:at|from)\s+([A-Z][A-Za-z0-9\s&.,'-]+(?:Inc|LLC|Ltd|Corporation|Corp))/,
+    ];
+
+    for (const pattern of companyPatterns) {
+      const companyMatch = message.match(pattern);
+      if (companyMatch) {
+        const company = companyMatch[1].trim();
+        if (company.length >= 2 && company.length <= 100) {
+          leadData.company = company;
+          hasValidData = true;
+          logger.debug("Company extracted", { company });
+          break;
+        }
+      }
+    }
+
+    // Log extraction summary
+    if (hasValidData) {
+      logger.info("Lead data extracted", {
+        hasEmail: !!leadData.email,
+        hasPhone: !!leadData.phone,
+        hasName: !!leadData.name,
+        hasCompany: !!leadData.company,
+      });
+    }
+
+    return hasValidData ? leadData : null;
   }
 
   /**
-   * Detect if user is expressing interest (lead signal)
+   * Enhanced interest signal detection with more context awareness
    */
   private detectInterestSignal(message: string): boolean {
-    const interestKeywords = [
+    const lowerMessage = message.toLowerCase();
+
+    // Strong interest signals (definite interest)
+    const strongSignals = [
+      "buy now",
+      "purchase",
+      "sign up",
+      "get started",
+      "i want",
+      "i need",
+      "interested in buying",
+      "ready to buy",
+      "place an order",
+    ];
+
+    // Medium interest signals (likely interest)
+    const mediumSignals = [
       "demo",
       "quote",
       "pricing",
       "price",
-      "buy",
-      "purchase",
+      "cost",
+      "how much",
       "interested",
-      "sign up",
-      "get started",
+      "more information",
+      "learn more",
       "contact",
       "talk to",
       "speak with",
-      "more information",
-      "learn more",
+      "schedule",
+      "book a call",
     ];
 
-    const lowerMessage = message.toLowerCase();
-    return interestKeywords.some((keyword) => lowerMessage.includes(keyword));
+    // Check strong signals
+    if (strongSignals.some((keyword) => lowerMessage.includes(keyword))) {
+      logger.debug("Strong interest signal detected", {
+        message: lowerMessage,
+      });
+      return true;
+    }
+
+    // Check medium signals
+    if (mediumSignals.some((keyword) => lowerMessage.includes(keyword))) {
+      logger.debug("Medium interest signal detected", {
+        message: lowerMessage,
+      });
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -426,11 +607,7 @@ export class AIAgentService {
     comment?: string
   ): Promise<boolean> {
     try {
-      // CRITICAL FIX: Import and use service client at the top of the file
-      // Change this line:
-      // const supabase = await createClient();
-      // To this:
-      // const { createServiceClient } = await import("@/lib/supabase/service");
+      // ✅ FIXED: Use service client imported at top
       const supabase = createServiceClient();
 
       console.log("=== Submitting Feedback ===");
@@ -495,8 +672,6 @@ export class AIAgentService {
     satisfactionRate: number;
   }> {
     try {
-      // CRITICAL FIX: Use service client instead of regular client
-      // const { createServiceClient } = await import("@/lib/supabase/service");
       const supabase = createServiceClient();
 
       console.log("=== Getting Feedback Stats ===");
