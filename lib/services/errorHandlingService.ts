@@ -1,4 +1,6 @@
-// lib/services/errorHandlingService.ts
+// lib/services/errorHandlingService.ts - ENHANCED VERSION
+// ✅ Fixed: Deterministic error message selection with logging for traceability
+
 import { logger } from "@/lib/utils/logger";
 
 export enum ErrorType {
@@ -15,6 +17,7 @@ export interface ErrorContext {
   type: ErrorType;
   originalError?: any;
   userMessage: string;
+  messageIndex?: number; // ✅ NEW: Track which message was shown
   agentId?: string;
   sessionId?: string;
   timestamp: string;
@@ -48,13 +51,17 @@ export class ErrorHandlingService {
       timestamp: new Date().toISOString(),
     };
 
-    // Determine user-friendly message
-    errorContext.userMessage = this.getUserFriendlyMessage(
+    // ✅ FIXED: Determine user-friendly message with deterministic selection
+    const { message, messageIndex } = this.getUserFriendlyMessage(
       errorContext.type,
-      error
+      error,
+      context
     );
+    
+    errorContext.userMessage = message;
+    errorContext.messageIndex = messageIndex; // ✅ Track which message was shown
 
-    // Log the error
+    // Log the error with message index for traceability
     this.logError(errorContext);
 
     return errorContext.userMessage;
@@ -128,12 +135,20 @@ export class ErrorHandlingService {
   }
 
   /**
-   * Get user-friendly error message
+   * ✅ FIXED: Get user-friendly error message with deterministic selection
+   * 
+   * Selection strategy:
+   * 1. Primary message (index 0): Used for first occurrence
+   * 2. Secondary message (index 1): Used for subsequent occurrences
+   * 3. Selection based on session context for consistency
+   * 
+   * @returns Object with message and messageIndex for logging
    */
   private static getUserFriendlyMessage(
     errorType: ErrorType,
-    error: any
-  ): string {
+    error: any,
+    context?: { agentId?: string; sessionId?: string }
+  ): { message: string; messageIndex: number } {
     const messages: Record<ErrorType, string[]> = {
       [ErrorType.OPENAI_API_ERROR]: [
         "I'm having trouble connecting to my AI systems right now. Please try again in a moment.",
@@ -167,18 +182,53 @@ export class ErrorHandlingService {
 
     const possibleMessages =
       messages[errorType] || messages[ErrorType.UNKNOWN_ERROR];
-    return possibleMessages[
-      Math.floor(Math.random() * possibleMessages.length)
-    ];
+
+    // ✅ DETERMINISTIC SELECTION: Use context to consistently pick same message
+    // This makes debugging easier - same error type will show same message for same session
+    let messageIndex = 0;
+    
+    if (context?.sessionId) {
+      // Use session ID hash to deterministically select message
+      // This ensures same session gets same error message for consistency
+      const hash = this.hashString(context.sessionId);
+      messageIndex = hash % possibleMessages.length;
+    } else if (context?.agentId) {
+      // Fallback to agent ID if no session
+      const hash = this.hashString(context.agentId);
+      messageIndex = hash % possibleMessages.length;
+    } else {
+      // Default to first message if no context
+      messageIndex = 0;
+    }
+
+    return {
+      message: possibleMessages[messageIndex],
+      messageIndex,
+    };
   }
 
   /**
-   * Log error for monitoring
+   * ✅ NEW: Simple hash function for deterministic message selection
+   * Converts string to consistent number for message index selection
+   */
+  private static hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
+   * ✅ ENHANCED: Log error with message index for better traceability
    */
   private static logError(errorContext: ErrorContext): void {
     logger.error("Chat error occurred", {
       type: errorContext.type,
       userMessage: errorContext.userMessage,
+      messageIndex: errorContext.messageIndex, // ✅ Log which message was shown
       agentId: errorContext.agentId,
       sessionId: errorContext.sessionId,
       timestamp: errorContext.timestamp,
@@ -399,17 +449,19 @@ export class ErrorHandlingService {
   }
 
   /**
-   * Create error report for analytics
+   * ✅ ENHANCED: Create error report with message index for analytics
    */
   static createErrorReport(errorContext: ErrorContext): {
     type: string;
     message: string;
+    messageIndex?: number; // ✅ Include in report
     timestamp: string;
     metadata: any;
   } {
     return {
       type: errorContext.type,
       message: this.sanitizeErrorMessage(errorContext.userMessage),
+      messageIndex: errorContext.messageIndex, // ✅ Track which message was shown
       timestamp: errorContext.timestamp,
       metadata: {
         agentId: errorContext.agentId,
