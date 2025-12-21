@@ -1,16 +1,16 @@
-﻿{
+{
   "name": "webrep",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "dev": "next dev",
     "lint": "next lint",
+    "start": "next start",
     "test": "vitest",
-    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
     "test:run": "vitest run",
-    "test:coverage": "vitest --coverage"
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.88",
@@ -73,3 +73,4 @@
     "vitest": "^4.0.15"
   }
 }
+
