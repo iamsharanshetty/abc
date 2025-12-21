@@ -1,6 +1,8 @@
 'use client';
 
+// ✅ Correct imports for AI SDK v5
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { useState, useRef, useEffect } from 'react';
 import { Send, X, MessageCircle, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,26 +16,24 @@ interface ChatWidgetProps {
 
 export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', title = 'WebRep AI' }: ChatWidgetProps) {
     const [isOpen, setIsOpen] = useState(false);
+    const [input, setInput] = useState('');
 
-    // Using simple local state to ensure input works regardless of hook quirks
-    const [localInput, setLocalInput] = useState('');
-
-    const chatHelpers = useChat({
-        api: '/api/chat',
-        body: {
-            agentId,
-            websiteUrl
-        },
-        onError: (err: any) => {
+    // ✅ AI SDK v5 useChat with DefaultChatTransport
+    const { messages, status, sendMessage } = useChat({
+        transport: new DefaultChatTransport({
+            api: '/api/v2/chat',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: {
+                agentId,
+                websiteUrl
+            }
+        }),
+        onError: (err: Error) => {
             console.error("Chat error:", err);
         }
     });
-
-    const { messages, append, isLoading, error, reload } = chatHelpers;
-
-    useEffect(() => {
-        console.log("useChat Debug:", Object.keys(chatHelpers));
-    }, []);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -47,29 +47,15 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
         }
     }, [messages, isOpen]);
 
-    const handleFormSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!localInput.trim() || isLoading) return;
+        if (!input.trim() || status !== 'ready') return;
 
-        const content = localInput;
-        setLocalInput(''); // Clear immediately
-
-        try {
-            if (typeof append === 'function') {
-                await append({
-                    role: 'user',
-                    content: content
-                });
-            } else {
-                console.error("Chat 'append' function is missing", chatHelpers);
-                // Fallback or alert
-                alert("Chat didn't initialize correctly. Please reload.");
-            }
-        } catch (e) {
-            console.error("Failed to send message", e);
-        }
+        sendMessage({ text: input });
+        setInput('');
     };
 
+    const isLoading = status === 'streaming' || status === 'submitted';
     const bgPrimary = { backgroundColor: primaryColor };
 
     return (
@@ -110,7 +96,7 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
                         </div>
                     )}
 
-                    {messages.map((m: any) => (
+                    {messages.map((m) => (
                         <div key={m.id} className={cn("flex w-full", m.role === 'user' ? "justify-end" : "justify-start")}>
                             <div
                                 className={cn(
@@ -121,7 +107,12 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
                                 )}
                                 style={m.role === 'user' ? bgPrimary : {}}
                             >
-                                {m.content}
+                                {m.parts?.map((part, index) => {
+                                    if (part.type === 'text' && 'text' in part) {
+                                        return <span key={index}>{part.text}</span>;
+                                    }
+                                    return null;
+                                })}
                             </div>
                         </div>
                     ))}
@@ -136,10 +127,9 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
                         </div>
                     )}
 
-                    {error && (
+                    {status === 'error' && (
                         <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2">
-                            <span>Something went wrong.</span>
-                            <button onClick={() => reload()} className="underline hover:text-red-600">Retry</button>
+                            <span>Something went wrong. Please try again.</span>
                         </div>
                     )}
 
@@ -148,16 +138,17 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
 
                 {/* Input Area */}
                 <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 h-[84px]">
-                    <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
+                    <form onSubmit={handleSubmit} className="flex items-center gap-2">
                         <input
                             className="flex-1 bg-slate-100 dark:bg-slate-800 p-3 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500/50 dark:text-white transition-all pl-4"
-                            value={localInput}
-                            onChange={(e) => setLocalInput(e.target.value)}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
                             placeholder="Type a message..."
+                            disabled={status !== 'ready'}
                         />
                         <button
                             type="submit"
-                            disabled={isLoading || !localInput.trim()}
+                            disabled={status !== 'ready' || !input.trim()}
                             className="p-3 rounded-full text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all transform active:scale-95"
                             style={bgPrimary}
                         >
