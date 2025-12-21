@@ -1,17 +1,17 @@
-// app/api/v2/chat/route.ts
+// app/api/v2/chat/route.ts - UPDATED WITH STREAMING SUPPORT
 
 /**
  * SECURITY POLICY DOCUMENTATION
  * ==============================
- * 
+ *
  * This API uses TWO different Supabase clients with different security models:
- * 
+ *
  * 1. createClient() - RLS-AWARE CLIENT
  *    - Respects Row Level Security policies
  *    - Only accesses data the authenticated user can see
  *    - Used for: Agent validation, verifying ownership
  *    - Why: Ensures users can only chat with their own agents
- * 
+ *
  * 2. createServiceClient() - SERVICE CLIENT (bypasses RLS)
  *    - Bypasses all Row Level Security policies
  *    - Can access ALL data in the database
@@ -19,12 +19,6 @@
  *    - Why: Chat widget is public-facing and doesn't have authentication
  *    - RISK: Could expose other users' data if not careful
  *    - MITIGATION: We validate agent ownership FIRST with RLS client
- * 
- * DECISION RATIONALE:
- * - POST endpoint uses RLS client for agent validation (security check)
- * - GET endpoint uses service client for conversation retrieval (functionality)
- * - This is intentional: we verify permissions first, then provide service
- * - Alternative would be to require authentication for chat widget (rejected for UX)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -45,12 +39,51 @@ interface ChatRequest {
     role: "user" | "assistant";
     content: string;
   }>;
+  stream?: boolean; // ✅ NEW: Optional streaming flag
+}
+
+/**
+ * ✅ FIXED: Helper to create a streaming response with NextResponse
+ * This allows us to send data chunk by chunk to the client
+ */
+function createStreamResponse(
+  stream: ReadableStream,
+  headers?: Record<string, string>
+): NextResponse {
+  return new NextResponse(stream, {
+    // ✅ Changed to NextResponse
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      ...headers,
+    },
+  });
+}
+
+/**
+ * ✅ NEW: Format message for Server-Sent Events (SSE)
+ * SSE is the protocol used for streaming data to browsers
+ */
+function formatSSE(data: any, event?: string): string {
+  const lines: string[] = [];
+
+  if (event) {
+    lines.push(`event: ${event}`);
+  }
+
+  lines.push(`data: ${JSON.stringify(data)}`);
+  lines.push(""); // Empty line signals end of message
+
+  return lines.join("\n") + "\n";
 }
 
 /**
  * POST /api/v2/chat - Chat with an AI agent
  * Rate Limited: 20 requests per minute per IP
- * 
+ *
+ * ✅ UPDATED: Now supports streaming responses
+ *
  * Security Model: Uses RLS-aware client for validation
  */
 async function chatHandler(request: NextRequest) {
@@ -73,16 +106,16 @@ async function chatHandler(request: NextRequest) {
 
     // Sanitize input
     const sanitizedMessage = body.message.trim();
+    const useStreaming = body.stream !== false; // Default to streaming
 
     logger.info("Chat request received", {
       agentId: body.agentId,
       messageLength: sanitizedMessage.length,
+      streaming: useStreaming,
     });
 
     /**
      * SECURITY CHECK: Use RLS-aware client to validate agent access
-     * This ensures the agent exists and is active
-     * If RLS policies are enabled, this will also verify ownership
      */
     const supabase = await createClient();
     const { data: agent, error: agentError } = await supabase
@@ -129,34 +162,12 @@ async function chatHandler(request: NextRequest) {
       body.conversationId ||
       `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    /**
-     * Call AI Agent Service with error handling and retry logic
-     * This automatically retries on transient errors (rate limits, timeouts)
-     */
-    const aiService = new AIAgentService();
-    const result = await ErrorHandlingService.executeWithRetry(
-      () => aiService.chat(context, sanitizedMessage, conversationId),
-      "agent_chat",
-      { agentId: body.agentId, sessionId: conversationId }
-    );
-
-    logger.info("Chat completed", {
-      agentId: body.agentId,
-      conversationId,
-      leadDetected: result.leadDetected,
-    });
-
-    // Return response
-    return NextResponse.json({
-      success: true,
-      data: {
-        response: result.response,
-        conversationId,
-        leadDetected: result.leadDetected,
-        leadData: result.leadData,
-        contextUsed: result.context?.length || 0,
-      },
-    });
+    // ✅ NEW: Handle streaming vs non-streaming
+    if (useStreaming) {
+      return handleStreamingChat(context, sanitizedMessage, conversationId);
+    } else {
+      return handleNonStreamingChat(context, sanitizedMessage, conversationId);
+    }
   } catch (error) {
     // Use error handling service for consistent error responses
     if (error instanceof ValidationError) {
@@ -178,6 +189,220 @@ async function chatHandler(request: NextRequest) {
   }
 }
 
+/**
+ * ✅ NEW: Handle streaming chat response
+ * This sends tokens one by one as they're generated
+ */
+async function handleStreamingChat(
+  context: AgentContext,
+  message: string,
+  conversationId: string
+): Promise<NextResponse> {
+  logger.info("Starting streaming chat", {
+    agentId: context.agentId,
+    conversationId,
+  });
+
+  // Create a TransformStream for sending chunks
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const aiService = new AIAgentService();
+
+        // Get relevant context first (needed for streaming)
+        const supabase = await createClient();
+        const { data: agent } = await supabase
+          .from("agents")
+          .select("settings")
+          .eq("id", context.agentId)
+          .single();
+
+        const settings = agent?.settings as any;
+
+        // Search for relevant context
+        const relevantContent = await aiService.searchContextPublic(
+          // ✅ Use public method
+          context.websiteUrl,
+          message,
+          settings
+        );
+        // Detect lead signals
+        const hasInterestSignal = await aiService.detectInterestSignalPublic(
+          // ✅ Use public method
+          message,
+          context.conversationHistory
+        );
+
+        const extractedLeadData = aiService.extractLeadDataPublic(message); // ✅ Use public method
+
+        // Send initial metadata
+        controller.enqueue(
+          encoder.encode(
+            formatSSE(
+              {
+                type: "metadata",
+                conversationId,
+                contextFound: relevantContent.length > 0,
+              },
+              "metadata"
+            )
+          )
+        );
+
+        // Variables to collect the full response
+        let fullResponse = "";
+        let tokenCount = 0;
+
+        // Stream the response using LangChain's streaming capability
+        await aiService.langChainService.streamResponse(
+          // ✅ Use public getter
+          context,
+          message,
+          relevantContent,
+          (token: string) => {
+            fullResponse += token;
+            tokenCount++;
+
+            // Send token to client
+            controller.enqueue(
+              encoder.encode(
+                formatSSE(
+                  {
+                    type: "token",
+                    token,
+                    tokenCount,
+                  },
+                  "token"
+                )
+              )
+            );
+          }
+        );
+
+        // Save conversation after streaming completes
+        await aiService.saveConversationPublic(
+          // ✅ Use public method
+          conversationId,
+          context.agentId,
+          message,
+          fullResponse
+        );
+        // Handle lead detection if applicable
+        let leadId: string | null = null;
+        if (extractedLeadData || hasInterestSignal) {
+          if (extractedLeadData) {
+            leadId = await aiService.saveLeadPublic(
+              // ✅ Use public method
+              conversationId,
+              context.agentId,
+              extractedLeadData
+            );
+
+            if (leadId) {
+              // Send lead notifications asynchronously
+              aiService
+                .sendLeadNotificationsPublic(
+                  // ✅ Use public method
+                  leadId,
+                  context.agentId,
+                  extractedLeadData,
+                  conversationId
+                )
+                .catch((err) => {
+                  logger.error("Error sending lead notifications", { err });
+                });
+            }
+          }
+        }
+
+        // Send completion event
+        controller.enqueue(
+          encoder.encode(
+            formatSSE(
+              {
+                type: "done",
+                conversationId,
+                fullResponse,
+                leadDetected: !!(extractedLeadData || hasInterestSignal),
+                leadData: extractedLeadData || undefined,
+                tokenCount,
+              },
+              "done"
+            )
+          )
+        );
+
+        logger.info("Streaming chat completed", {
+          conversationId,
+          tokenCount,
+          leadDetected: !!(extractedLeadData || hasInterestSignal),
+        });
+
+        controller.close();
+      } catch (error) {
+        logger.error("Error in streaming chat", { error, conversationId });
+
+        // Send error event
+        const errorMessage = ErrorHandlingService.handleChatError(error, {
+          agentId: context.agentId,
+          sessionId: conversationId,
+        });
+
+        controller.enqueue(
+          encoder.encode(
+            formatSSE(
+              {
+                type: "error",
+                error: errorMessage,
+              },
+              "error"
+            )
+          )
+        );
+
+        controller.close();
+      }
+    },
+  });
+
+  return createStreamResponse(stream);
+}
+
+/**
+ * ✅ EXISTING: Handle non-streaming chat (backwards compatibility)
+ * This is the original implementation
+ */
+async function handleNonStreamingChat(
+  context: AgentContext,
+  message: string,
+  conversationId: string
+) {
+  const aiService = new AIAgentService();
+  const result = await ErrorHandlingService.executeWithRetry(
+    () => aiService.chat(context, message, conversationId),
+    "agent_chat",
+    { agentId: context.agentId, sessionId: conversationId }
+  );
+
+  logger.info("Chat completed", {
+    agentId: context.agentId,
+    conversationId,
+    leadDetected: result.leadDetected,
+  });
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      response: result.response,
+      conversationId,
+      leadDetected: result.leadDetected,
+      leadData: result.leadData,
+      contextUsed: result.context?.length || 0,
+    },
+  });
+}
+
 // Export with rate limiting
 export const POST = withRateLimit(chatRateLimiter, chatHandler);
 
@@ -186,18 +411,6 @@ export const POST = withRateLimit(chatRateLimiter, chatHandler);
  * Rate Limited: 20 requests per minute per IP
  *
  * Security Model: Uses SERVICE client to bypass RLS
- * 
- * WHY SERVICE CLIENT?
- * - Chat widgets are often embedded on public websites
- * - Users are not authenticated when chatting
- * - We need to retrieve conversation history to show chat context
- * - RLS policies would block unauthenticated requests
- * 
- * SECURITY CONSIDERATIONS:
- * - conversationId is a random UUID - hard to guess
- * - No sensitive data is exposed in conversations
- * - This is equivalent to "anyone with the link can view"
- * - If you need stricter security, require authentication first
  */
 async function chatGetHandler(request: NextRequest) {
   try {
@@ -210,11 +423,6 @@ async function chatGetHandler(request: NextRequest) {
       throw new ValidationError("conversationId is required");
     }
 
-    /**
-     * IMPORTANT: Using SERVICE client to bypass RLS
-     * This is intentional for public chat widget functionality
-     * See security documentation at top of file
-     */
     const supabase = createServiceClient();
 
     // Get conversation history

@@ -29,18 +29,17 @@ export interface AgentContext {
 }
 
 export class AIAgentService {
-  private langChainService: LangChainService;
+  private _langChainService: LangChainService; // ✅ Renamed with underscore
   private crmService: CRMService;
 
   constructor() {
-    this.langChainService = new LangChainService();
+    this._langChainService = new LangChainService(); // ✅ Use new name
     this.crmService = new CRMService();
   }
-
   /**
    * ✅ FIX 2: Search for relevant context from website embeddings
    * NOW CONFIGURABLE: Uses agent settings for contextRetrievalCount and matchThreshold
-   * 
+   *
    * @param websiteUrl - The website to search within
    * @param query - The user's question
    * @param settings - Agent settings containing retrieval preferences (optional)
@@ -86,7 +85,7 @@ export class AIAgentService {
       const { data, error } = await supabase.rpc("match_website_content", {
         query_embedding: embeddingString,
         match_threshold: validatedThreshold, // ✅ Now configurable per agent
-        match_count: validatedCount,         // ✅ Now configurable per agent
+        match_count: validatedCount, // ✅ Now configurable per agent
         website_url_filter: websiteUrl,
       });
 
@@ -96,7 +95,7 @@ export class AIAgentService {
       }
 
       const results = data?.map((item: any) => item.content_section) || [];
-      
+
       logger.debug("Context search completed", {
         resultsCount: results.length,
         requestedCount: validatedCount,
@@ -294,13 +293,13 @@ export class AIAgentService {
 
   /**
    * ✅ FIX 1: Enhanced interest signal detection with LLM-based intent classification
-   * 
+   *
    * This replaces simple keyword matching with AI-powered intent understanding.
    * Benefits:
    * - Understands variations: "I'd love a demonstration" = "I want a demo"
    * - Context-aware: "I don't want pricing" correctly identified as NOT interested
    * - Handles any language style or phrasing
-   * 
+   *
    * @param message - The user's current message
    * @param conversationHistory - Recent conversation for context
    * @returns Promise<boolean> - True if user shows purchase intent
@@ -314,19 +313,19 @@ export class AIAgentService {
       // This avoids unnecessary LLM calls for clear cases
       const lowerMessage = message.toLowerCase();
       const strongKeywords = [
-        "buy now", 
-        "purchase now", 
-        "sign me up", 
+        "buy now",
+        "purchase now",
+        "sign me up",
         "place an order",
         "ready to buy",
         "checkout",
-        "add to cart"
+        "add to cart",
       ];
-      
+
       // If strong keywords are present, skip LLM call to save API costs
       if (strongKeywords.some((keyword) => lowerMessage.includes(keyword))) {
-        logger.debug("Strong keyword detected, skipping LLM intent detection", { 
-          message: lowerMessage.substring(0, 50) 
+        logger.debug("Strong keyword detected, skipping LLM intent detection", {
+          message: lowerMessage.substring(0, 50),
         });
         return true;
       }
@@ -389,8 +388,8 @@ Answer:`;
     } catch (error) {
       // Fallback to keyword detection if LLM fails
       // This ensures the system still works even if OpenAI API is down
-      logger.warn("LLM intent detection failed, using keyword fallback", { 
-        error: error instanceof Error ? error.message : String(error) 
+      logger.warn("LLM intent detection failed, using keyword fallback", {
+        error: error instanceof Error ? error.message : String(error),
       });
       return this.detectInterestSignalFallback(message);
     }
@@ -398,51 +397,86 @@ Answer:`;
 
   /**
    * ✅ FIX 1: Fallback keyword-based detection if LLM is unavailable
-   * 
+   *
    * This is a safety net that ensures lead detection still works
    * even if the OpenAI API is down or rate-limited.
-   * 
+   *
    * @param message - The user's message
    * @returns boolean - True if keywords suggest interest
    */
   private detectInterestSignalFallback(message: string): boolean {
     const lowerMessage = message.toLowerCase();
-    
+
     // Expanded keyword list with common variations
     const keywords = [
       // Purchase intent
-      "buy", "purchase", "order", "checkout", "payment",
-      
+      "buy",
+      "purchase",
+      "order",
+      "checkout",
+      "payment",
+
       // Demo/trial intent
-      "demo", "demonstration", "trial", "test", "preview",
-      
+      "demo",
+      "demonstration",
+      "trial",
+      "test",
+      "preview",
+
       // Pricing/quote intent
-      "quote", "pricing", "price", "cost", "how much", "what does it cost",
-      "pricing information", "get a quote",
-      
+      "quote",
+      "pricing",
+      "price",
+      "cost",
+      "how much",
+      "what does it cost",
+      "pricing information",
+      "get a quote",
+
       // Information gathering with intent
-      "interested", "more information", "learn more", "tell me more",
-      "find out more", "details",
-      
+      "interested",
+      "more information",
+      "learn more",
+      "tell me more",
+      "find out more",
+      "details",
+
       // Contact/meeting intent
-      "contact", "talk to", "speak with", "call", "email",
-      "schedule", "book a call", "set up a meeting", "appointment",
-      
+      "contact",
+      "talk to",
+      "speak with",
+      "call",
+      "email",
+      "schedule",
+      "book a call",
+      "set up a meeting",
+      "appointment",
+
       // Sign-up intent
-      "sign up", "register", "get started", "join", "enroll",
-      
+      "sign up",
+      "register",
+      "get started",
+      "join",
+      "enroll",
+
       // Urgency signals
-      "need", "want", "looking for", "require", "must have"
+      "need",
+      "want",
+      "looking for",
+      "require",
+      "must have",
     ];
 
-    const hasKeyword = keywords.some((keyword) => lowerMessage.includes(keyword));
-    
+    const hasKeyword = keywords.some((keyword) =>
+      lowerMessage.includes(keyword)
+    );
+
     if (hasKeyword) {
       logger.debug("Fallback keyword detection triggered", {
         message: lowerMessage.substring(0, 50),
       });
     }
-    
+
     return hasKeyword;
   }
 
@@ -502,16 +536,16 @@ Answer:`;
         userMessage,
         context.conversationHistory
       );
-      
+
       const extractedLeadData = this.extractLeadData(userMessage);
 
       // Step 3: Generate response using LangChain
-      const assistantResponse = await this.langChainService.generateResponse(
+      const assistantResponse = await this._langChainService.generateResponse(
+        // ✅ Use underscore
         context,
         userMessage,
         relevantContent
       );
-
       // Step 4: Save conversation to database
       await this.saveConversation(
         conversationId,
@@ -947,5 +981,70 @@ Answer:`;
       success: results.every((r) => !r.error),
       results,
     };
+  }
+
+  /**
+   * ✅ NEW: Public accessors for streaming support
+   * These allow the chat API to call internal methods during streaming
+   */
+  public async searchContextPublic(
+    websiteUrl: string,
+    query: string,
+    settings?: AgentSettings
+  ): Promise<string[]> {
+    return this.searchContext(websiteUrl, query, settings);
+  }
+
+  public async detectInterestSignalPublic(
+    message: string,
+    conversationHistory: AgentMessage[]
+  ): Promise<boolean> {
+    return this.detectInterestSignal(message, conversationHistory);
+  }
+
+  public extractLeadDataPublic(message: string): Partial<LeadData> | null {
+    return this.extractLeadData(message);
+  }
+
+  public async saveConversationPublic(
+    conversationId: string,
+    agentId: string,
+    userMessage: string,
+    assistantResponse: string
+  ): Promise<void> {
+    return this.saveConversation(
+      conversationId,
+      agentId,
+      userMessage,
+      assistantResponse
+    );
+  }
+
+  public async saveLeadPublic(
+    conversationId: string,
+    agentId: string,
+    leadData: Partial<LeadData>
+  ): Promise<string | null> {
+    return this.saveLead(conversationId, agentId, leadData);
+  }
+
+  public async sendLeadNotificationsPublic(
+    leadId: string,
+    agentId: string,
+    leadData: Partial<LeadData>,
+    conversationId: string
+  ): Promise<void> {
+    return this.sendLeadNotifications(
+      leadId,
+      agentId,
+      leadData,
+      conversationId
+    );
+  }
+
+  // Also expose the LangChain service
+  public get langChainService(): LangChainService {
+    // ✅ Add return type
+    return this._langChainService; // ✅ Use underscore
   }
 }
