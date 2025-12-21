@@ -16,7 +16,12 @@ interface RateLimitEntry {
  */
 interface RedisClient {
   get(key: string): Promise<string | null>;
-  set(key: string, value: string, mode: string, duration: number): Promise<void>;
+  set(
+    key: string,
+    value: string,
+    mode: string,
+    duration: number
+  ): Promise<void>;
   incr(key: string): Promise<number>;
   expire(key: string, seconds: number): Promise<void>;
   del(key: string): Promise<void>;
@@ -35,21 +40,29 @@ export function createRedisAdapter(): RedisClient | null {
   }
 
   try {
-    // Example for ioredis (most popular)
-    // Uncomment and install: npm install ioredis
-    /*
-    const Redis = require('ioredis');
+    // =================================================================
+    // REDIS IMPLEMENTATION - COMMENTED OUT
+    // =================================================================
+    // To enable Redis support:
+    // 1. Install Redis client: pnpm install redis
+    //    OR: pnpm install ioredis
+    // 2. Set REDIS_URL environment variable
+    // 3. Uncomment ONE of the implementations below
+    // =================================================================
+
+    // ===== OPTION 1: ioredis (Recommended for Vercel/serverless) =====
+    const Redis = require("ioredis");
     const redis = new Redis(redisUrl);
-    
+
     return {
       async get(key: string) {
         return await redis.get(key);
       },
       async set(key: string, value: string, mode: string, duration: number) {
-        if (mode === 'PX') {
-          await redis.set(key, value, 'PX', duration);
-        } else if (mode === 'EX') {
-          await redis.set(key, value, 'EX', duration);
+        if (mode === "PX") {
+          await redis.set(key, value, "PX", duration);
+        } else if (mode === "EX") {
+          await redis.set(key, value, "EX", duration);
         }
       },
       async incr(key: string) {
@@ -60,13 +73,11 @@ export function createRedisAdapter(): RedisClient | null {
       },
       async del(key: string) {
         await redis.del(key);
-      }
+      },
     };
-    */
 
-    // Example for node-redis
-    // Uncomment and install: npm install redis
-    
+    /* 
+    // ===== OPTION 2: node-redis =====
     const redis = require('redis');
     const client = redis.createClient({ url: redisUrl });
     client.connect();
@@ -91,7 +102,7 @@ export function createRedisAdapter(): RedisClient | null {
         await client.del(key);
       }
     };
-    
+    */
 
     logger.warn(
       "Redis client code is commented out. Uncomment the appropriate section based on your Redis client choice."
@@ -105,29 +116,29 @@ export function createRedisAdapter(): RedisClient | null {
 
 /**
  * ✅ ENHANCED: Rate limiter with Redis support
- * 
+ *
  * PRODUCTION DEPLOYMENT GUIDE:
  * ============================
- * 
+ *
  * 1. Choose a Redis provider:
  *    - Upstash Redis (https://upstash.com) - Serverless, perfect for Next.js
  *    - Redis Cloud (https://redis.com)
  *    - AWS ElastiCache
  *    - Self-hosted Redis
- * 
+ *
  * 2. Set environment variable:
  *    REDIS_URL=redis://username:password@host:port
- * 
+ *
  * 3. Install Redis client:
- *    npm install ioredis
+ *    pnpm install ioredis
  *    OR
- *    npm install redis
- * 
+ *    pnpm install redis
+ *
  * 4. Uncomment Redis adapter code above based on your client choice
- * 
+ *
  * 5. The rate limiter will automatically use Redis when available,
  *    falling back to in-memory for development
- * 
+ *
  * MIGRATION PATH:
  * ===============
  * Development: In-memory (current) → Production: Redis (automatic)
