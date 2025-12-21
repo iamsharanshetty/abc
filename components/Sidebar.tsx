@@ -11,7 +11,8 @@ import {
     Users,
     CreditCard,
     Building,
-    Headphones
+    Headphones,
+    Zap
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -28,6 +29,7 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
         { name: "Previous Agents", href: "/dashboard/previous-agents", icon: MessageSquare },
         { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
         { name: "Create Agent", href: "/dashboard/create", icon: Bot },
+        { name: "Integrations", href: "/dashboard/integrations", icon: Zap },
         { name: "Team", href: "/dashboard/team", icon: Users },
         { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
         { name: "Organization Settings", href: "/dashboard/settings", icon: Building },

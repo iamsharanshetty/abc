@@ -37,17 +37,31 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
+    // Check for critical environment variables
+    if (!process.env.TRIGGER_SECRET_KEY) {
+      throw new ValidationError("Missing TRIGGER_SECRET_KEY in environment variables");
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      throw new ValidationError("Missing NEXT_PUBLIC_SUPABASE_URL in environment variables");
+    }
+
     // Trigger the background job
-    const handle = await tasks.trigger<typeof ingestWebsiteTask>(
-      "ingest-website",
-      {
-        url,
-        maxPages,
-        useBrowser,
-        forceRefresh,
-        userId: user?.id,
-      }
-    );
+    let handle;
+    try {
+      handle = await tasks.trigger<typeof ingestWebsiteTask>(
+        "ingest-website",
+        {
+          url,
+          maxPages,
+          useBrowser,
+          forceRefresh,
+          userId: user?.id,
+        }
+      );
+    } catch (e) {
+      logger.error("Failed to trigger task", { error: e });
+      throw new Error(`Failed to trigger background job: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
 
     logger.info("Job triggered successfully", {
       jobId: handle.id,
