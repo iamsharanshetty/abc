@@ -1,0 +1,24 @@
+(node:18688) ExperimentalWarning: CommonJS module C:\Users\Harshitha\AppData\Roaming\npm\node_modules\npm\node_modules\debug\src\node.js is loading ES Module C:\Users\Harshitha\AppData\Roaming\npm\node_modules\npm\node_modules\supports-color\index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: webrep@0.1.0
+npm error Found: react@19.2.0
+npm error node_modules/react
+npm error   react@"19.2.0" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer react@"^18 || ~19.0.1 || ~19.1.2 || ^19.2.1" from @ai-sdk/react@2.0.118
+npm error node_modules/@ai-sdk/react
+npm error   @ai-sdk/react@"^2.0.117" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error C:\Users\Harshitha\AppData\Local\npm-cache\_logs\2025-12-21T18_10_13_226Z-eresolve-report.txt
+npm error A complete log of this run can be found in: C:\Users\Harshitha\AppData\Local\npm-cache\_logs\2025-12-21T18_10_13_226Z-debug-0.log

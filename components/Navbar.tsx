@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu } from "lucide-react"
+import { Menu, X } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
@@ -10,86 +11,119 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 
 export function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = React.useState(false)
+    const [scrolled, setScrolled] = React.useState(false)
+
+    React.useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20)
+        }
+        window.addEventListener("scroll", handleScroll)
+        return () => window.removeEventListener("scroll", handleScroll)
+    }, [])
 
     return (
-        <header className="sticky top-0 z-40 w-full border-b bg-background">
-            <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-                <div className="flex gap-6 md:gap-10">
-                    <Link href="/" className="flex items-center space-x-2">
-                        <span className="inline-block font-bold">WebRep</span>
-                    </Link>
-                    <nav className="hidden gap-6 md:flex">
-                        <Link
-                            href="#"
-                            className="flex items-center text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            Features
+        <>
+            <motion.header
+                className={cn(
+                    "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+                    scrolled ? "py-4" : "py-6"
+                )}
+                initial={{ y: -100 }}
+                animate={{ y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <div className="container mx-auto px-4">
+                    <nav className={cn(
+                        "rounded-full border transition-all duration-300 flex items-center justify-between px-6 py-3",
+                        scrolled
+                            ? "bg-background/80 backdrop-blur-md border-border shadow-sm support-[backdrop-filter]:bg-background/60"
+                            : "bg-transparent border-transparent"
+                    )}>
+                        {/* Logo */}
+                        <Link href="/" className="flex items-center gap-2 group">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-blue-500/25 transition-all duration-300">
+                                W
+                            </div>
+                            <span className="font-bold text-lg tracking-tight select-none">WebRep</span>
                         </Link>
-                        <Link
-                            href="/pricing"
-                            className="flex items-center text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            Pricing
-                        </Link>
-                        <Link
-                            href="#"
-                            className="flex items-center text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            About
-                        </Link>
-                    </nav>
-                </div>
-                <div className="flex items-center space-x-4">
-                    <div className="hidden md:flex md:items-center md:space-x-4">
-                        <ThemeToggle />
-                        <Button variant="ghost" size="sm">
-                            Log in
-                        </Button>
-                        <Button size="sm">Sign up</Button>
-                    </div>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="md:hidden"
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    >
-                        <Menu className="h-6 w-6" />
-                        <span className="sr-only">Toggle menu</span>
-                    </Button>
-                </div>
-            </div>
-            {isMenuOpen && (
-                <div className="container md:hidden">
-                    <nav className="flex flex-col space-y-4 px-4 py-4">
-                        <Link
-                            href="#"
-                            className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            Features
-                        </Link>
-                        <Link
-                            href="/pricing"
-                            className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            Pricing
-                        </Link>
-                        <Link
-                            href="#"
-                            className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            About
-                        </Link>
-                        <div className="flex flex-col space-y-2 pt-4">
-                            <Button variant="ghost" size="sm" className="w-full justify-start">
-                                Log in
-                            </Button>
-                            <Button size="sm" className="w-full justify-start">
-                                Sign up
-                            </Button>
+
+                        {/* Desktop Nav */}
+                        <div className="hidden md:flex items-center gap-8">
+                            {['Features', 'Pricing', 'About'].map((item) => (
+                                <Link
+                                    key={item}
+                                    href={`/${item.toLowerCase()}`}
+                                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+                                >
+                                    {item}
+                                    <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-foreground transition-all duration-300 group-hover:w-full opacity-0 group-hover:opacity-100" />
+                                </Link>
+                            ))}
                         </div>
+
+                        {/* Actions */}
+                        <div className="hidden md:flex items-center gap-4">
+                            <ThemeToggle />
+                            <div className="w-px h-4 bg-border" />
+                            <Link href="/login">
+                                <Button variant="ghost" size="sm" className="font-medium">
+                                    Log in
+                                </Button>
+                            </Link>
+                            <Link href="/login">
+                                <Button size="sm" className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
+                                    Start Free
+                                </Button>
+                            </Link>
+                        </div>
+
+                        {/* Mobile Toggle */}
+                        <button
+                            className="md:hidden p-2 text-foreground"
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        >
+                            {isMenuOpen ? <X /> : <Menu />}
+                        </button>
                     </nav>
                 </div>
-            )}
-        </header>
+            </motion.header>
+
+            {/* Mobile Menu */}
+            <AnimatePresence>
+                {isMenuOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="fixed inset-0 z-40 bg-background pt-24 px-4 md:hidden"
+                    >
+                        <nav className="flex flex-col gap-4 text-lg font-medium">
+                            {['Features', 'Pricing', 'About'].map((item) => (
+                                <Link
+                                    key={item}
+                                    href={`/${item.toLowerCase()}`}
+                                    onClick={() => setIsMenuOpen(false)}
+                                    className="p-4 border-b border-border/50"
+                                >
+                                    {item}
+                                </Link>
+                            ))}
+                            <div className="flex flex-col gap-4 mt-8">
+                                <Link href="/login" onClick={() => setIsMenuOpen(false)}>
+                                    <Button className="w-full justify-center" size="lg">
+                                        Start Free Trial
+                                    </Button>
+                                </Link>
+                                <Link href="/login" onClick={() => setIsMenuOpen(false)}>
+                                    <Button variant="outline" className="w-full justify-center" size="lg">
+                                        Log in
+                                    </Button>
+                                </Link>
+                            </div>
+                        </nav>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </>
     )
 }
