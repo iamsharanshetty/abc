@@ -69,13 +69,12 @@ function CreateAgentPageContent() {
    * Poll job status from Trigger.dev
    */
   const pollJobStatus = async (jobId: string) => {
-    const maxAttempts = 60; // Poll for up to 5 minutes (60 × 5 seconds)
+    const maxAttempts = 60;
     let attempts = 0;
 
     const poll = async () => {
       try {
-        logger.debug("Polling job status", {
-          jobId,
+        logger.pollingProgress("start", jobId, {
           attempt: attempts + 1,
           maxAttempts,
         });
@@ -83,8 +82,7 @@ function CreateAgentPageContent() {
         const response = await fetch(`/api/v2/jobs/${jobId}`);
         const result = await response.json();
 
-        logger.debug("Job status response received", {
-          jobId,
+        logger.pollingProgress("response", jobId, {
           status: result.data?.status,
           progress: result.data?.progress,
         });
@@ -105,14 +103,13 @@ function CreateAgentPageContent() {
               (progress / 100) * PROGRESS_STEPS.length
             );
             setProgressIndex(Math.min(stepIndex, PROGRESS_STEPS.length - 1));
-            logger.debug("Progress updated", {
-              jobId,
+
+            logger.pollingProgress("progress", jobId, {
               progress,
               stepIndex: stepIndex + 1,
               totalSteps: PROGRESS_STEPS.length,
             });
           } else if (status === "running") {
-            // Fallback: slowly increment progress if no specific progress reported
             setProgressIndex((prev) => {
               const next = prev + 1;
               return next < PROGRESS_STEPS.length - 1 ? next : prev;
@@ -120,62 +117,45 @@ function CreateAgentPageContent() {
           }
 
           if (status === "completed") {
-            // ✅ Job finished successfully
-            logger.info("Job completed successfully", {
-              jobId,
+            logger.pollingProgress("complete", jobId, {
               pagesProcessed: jobResult?.pagesProcessed,
               embeddingsCreated: jobResult?.embeddingsCreated,
             });
 
-            // Stop polling
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
             }
 
-            // Complete the progress animation
             setProgressIndex(PROGRESS_STEPS.length - 1);
-
-            // Wait a moment to show completion
             await new Promise((resolve) => setTimeout(resolve, 1000));
-
-            // Store analysis results
             setAnalysisResult(result.data.result);
-
-            // Move to settings step
             setStep("settings");
             setIsLoading(false);
             return;
           } else if (status === "failed") {
-            // ❌ Job failed
             throw new Error(
               result.data.error?.message || "Job processing failed"
             );
           } else if (status === "running" || status === "pending") {
-            // 🔄 Still processing
             attempts++;
-
             if (attempts >= maxAttempts) {
               throw new Error(
                 "Job is taking too long to complete. Please try again with fewer pages."
               );
             }
-            // Continue polling (interval will call this function again)
           } else if (status === "canceled") {
-            // 🚫 Job was canceled
             throw new Error("Job was canceled");
           }
         } else {
           throw new Error(result.error?.message || "Failed to get job status");
         }
       } catch (error) {
-        logger.error("Error polling job status", {
-          jobId,
+        logger.pollingProgress("error", jobId, {
           error: error instanceof Error ? error.message : "Unknown error",
           attempt: attempts + 1,
         });
 
-        // Stop polling on error
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
@@ -189,7 +169,6 @@ function CreateAgentPageContent() {
       }
     };
 
-    // Start polling immediately, then every 5 seconds
     poll();
     pollingIntervalRef.current = setInterval(poll, 5000);
   };
@@ -609,11 +588,13 @@ function CreateAgentPageContent() {
 
 export default function CreateAgentPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
       <CreateAgentPageContent />
     </Suspense>
   );
