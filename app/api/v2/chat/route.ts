@@ -327,7 +327,7 @@ async function handleStreamingChat(
                   extractedLeadData,
                   conversationId
                 )
-                .catch((err) => {
+                .catch((err: unknown) => {
                   logger.error("Error sending lead notifications", { err });
                 });
             }

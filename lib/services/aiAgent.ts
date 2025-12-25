@@ -1026,6 +1026,210 @@ Answer:`;
     };
   }
 
+  /**
+   * ✅ PUBLIC VERSION: Save conversation for public/embedded chat (no auth required)
+   * Used by the public chat widget endpoint
+   */
+  async saveConversationPublic(
+    conversationId: string,
+    agentId: string,
+    userMessage: string,
+    assistantResponse: string
+  ): Promise<boolean> {
+    try {
+      const supabase = createServiceClient();
+
+      logger.debug("Saving public conversation", {
+        conversationId,
+        agentId,
+        messageLength: userMessage.length,
+        responseLength: assistantResponse.length,
+      });
+
+      const { error } = await supabase.from("conversations").insert({
+        id: conversationId,
+        agent_id: agentId,
+        user_message: userMessage,
+        assistant_response: assistantResponse,
+        metadata: {
+          source: "public_chat",
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      if (error) {
+        logger.error("Error saving public conversation", { error, conversationId });
+        return false;
+      }
+
+      logger.info("Public conversation saved", { conversationId, agentId });
+      return true;
+    } catch (error) {
+      logger.error("Error in saveConversationPublic", { error });
+      return false;
+    }
+  }
+
+  /**
+   * ✅ PUBLIC VERSION: Save lead for public/embedded chat (no auth required)
+   * Used by the public chat widget endpoint
+   */
+  async saveLeadPublic(
+    conversationId: string,
+    agentId: string,
+    leadData: Partial<LeadData>
+  ): Promise<string | null> {
+    try {
+      const supabase = createServiceClient();
+
+      logger.debug("Saving public lead", {
+        conversationId,
+        agentId,
+        hasEmail: !!leadData.email,
+        hasPhone: !!leadData.phone,
+        hasName: !!leadData.name,
+      });
+
+      // Prepare lead data
+      const fullLeadData: Partial<LeadData> = {
+        ...leadData,
+        conversationId,
+        capturedAt: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("leads")
+        .insert({
+          agent_id: agentId,
+          conversation_id: conversationId,
+          name: fullLeadData.name || null,
+          email: fullLeadData.email || null,
+          phone: fullLeadData.phone || null,
+          company: fullLeadData.company || null,
+          interest: fullLeadData.interest || null,
+          captured_at: fullLeadData.capturedAt,
+          status: "new",
+          metadata: {
+            source: "public_chat",
+            captured_at: fullLeadData.capturedAt,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        logger.error("Error saving public lead", { error, conversationId });
+        return null;
+      }
+
+      logger.info("Public lead saved", {
+        leadId: data.id,
+        conversationId,
+        agentId,
+      });
+
+      return data.id;
+    } catch (error) {
+      logger.error("Error in saveLeadPublic", { error });
+      return null;
+    }
+  }
+
+  /**
+   * ✅ PUBLIC VERSION: Send lead notifications for public/embedded chat (no auth required)
+   * Used by the public chat widget endpoint
+   */
+  async sendLeadNotificationsPublic(
+    leadId: string,
+    agentId: string,
+    leadData: Partial<LeadData>,
+    conversationId: string
+  ): Promise<void> {
+    try {
+      const supabase = createServiceClient();
+
+      logger.debug("Sending public lead notifications", { leadId, agentId });
+
+      // Get agent details and settings
+      const { data: agent, error: agentError } = await supabase
+        .from("agents")
+        .select("name, settings")
+        .eq("id", agentId)
+        .single();
+
+      if (agentError || !agent) {
+        logger.error("Agent not found for public lead notifications", {
+          agentId,
+          error: agentError,
+        });
+        return;
+      }
+
+      const settings = agent.settings as AgentSettings;
+
+      // Prepare full lead data
+      const fullLeadData: LeadData = {
+        name: leadData.name || "",
+        email: leadData.email || "",
+        phone: leadData.phone || "",
+        company: leadData.company || "",
+        interest: leadData.interest || "",
+        capturedAt: leadData.capturedAt || new Date().toISOString(),
+        conversationId,
+      };
+
+      // Send to webhook if configured
+      if (settings?.webhookEnabled && settings?.webhookUrl) {
+        try {
+          await this.sendLeadToWebhook(settings.webhookUrl, fullLeadData);
+
+          await supabase
+            .from("leads")
+            .update({
+              sent_to_webhook: true,
+              webhook_sent_at: new Date().toISOString(),
+            })
+            .eq("id", leadId);
+        } catch (error) {
+          logger.error("Error sending to webhook in public notifications", {
+            error,
+          });
+        }
+      }
+
+      // Send to CRM if configured
+      if (settings?.crmEnabled && this.crmService.isHubSpotConfigured()) {
+        try {
+          const crmResult = await this.crmService.syncToHubSpot(
+            fullLeadData,
+            agent.name
+          );
+
+          if (crmResult.success) {
+            await supabase
+              .from("leads")
+              .update({
+                crm_synced: true,
+                crm_sync_id: crmResult.crmContactId,
+                crm_synced_at: new Date().toISOString(),
+              })
+              .eq("id", leadId);
+          }
+        } catch (error) {
+          logger.error("Error syncing to CRM in public notifications", {
+            error,
+          });
+        }
+      }
+
+      logger.info("Public lead notifications completed", { leadId });
+    } catch (error) {
+      logger.error("Error in sendLeadNotificationsPublic", { error });
+    }
+  }
+
+  }
+
   // Also expose the LangChain service
   public get langChainService(): LangChainService {
     // ✅ Add return type
