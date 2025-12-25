@@ -12,14 +12,25 @@ import { AgentContext } from "./aiAgent";
  * Wraps OpenAI with LangChain for better prompt management and chain composition
  */
 export class LangChainService {
-  private model: ChatOpenAI;
+  private apiKey: string;
 
   constructor() {
-    this.model = new ChatOpenAI({
+    // ✅ Just store the API key, don't create model yet
+    this.apiKey = config.openai.apiKey;
+  }
+
+  /**
+   * ✅ NEW: Create model instance with agent-specific settings
+   */
+  private createModel(settings?: {
+    temperature?: number;
+    maxTokens?: number;
+  }): ChatOpenAI {
+    return new ChatOpenAI({
       modelName: "gpt-4o-mini",
-      temperature: 0.7,
-      maxTokens: 500,
-      openAIApiKey: config.openai.apiKey,
+      temperature: settings?.temperature ?? 0.7, // Use setting or default
+      maxTokens: settings?.maxTokens ?? 500, // Use setting or default
+      openAIApiKey: this.apiKey,
     });
   }
 
@@ -117,10 +128,18 @@ export class LangChainService {
 
   /**
    * Create LangChain chain for agent response with proper variable mapping
+   * ✅ NOW ACCEPTS SETTINGS for dynamic model configuration
    */
-  private createAgentChain(context: AgentContext) {
-    const { template, inputVariables } = this.buildSystemPromptTemplate(context);
+  private createAgentChain(
+    context: AgentContext,
+    settings?: { temperature?: number; maxTokens?: number }
+  ) {
+    const { template, inputVariables } =
+      this.buildSystemPromptTemplate(context);
     const defaults = this.getDefaultValues(context);
+
+    // ✅ Create model with settings
+    const model = this.createModel(settings);
 
     // Create prompt template with explicit input variables
     const promptTemplate = new PromptTemplate({
@@ -140,7 +159,7 @@ export class LangChainService {
         userMessage: (input: any) => input.userMessage,
       },
       promptTemplate,
-      this.model,
+      model, // ✅ Use the dynamically created model
       new StringOutputParser(),
     ]);
 
@@ -149,14 +168,17 @@ export class LangChainService {
 
   /**
    * Generate agent response using LangChain
+   * ✅ NOW ACCEPTS SETTINGS parameter
    */
   async generateResponse(
     context: AgentContext,
     userMessage: string,
-    relevantContext: string[]
+    relevantContext: string[],
+    settings?: { temperature?: number; maxTokens?: number } // ✅ NEW parameter
   ): Promise<string> {
     try {
-      const chain = this.createAgentChain(context);
+      // ✅ Pass settings to chain creation
+      const chain = this.createAgentChain(context, settings);
 
       // Format inputs
       const contextText =
@@ -172,6 +194,8 @@ export class LangChainService {
         contextLength: contextText.length,
         historyLength: conversationHistoryText.length,
         role: context.role,
+        temperature: settings?.temperature ?? 0.7, // ✅ Log the settings being used
+        maxTokens: settings?.maxTokens ?? 500,
       });
 
       // Invoke the chain with properly mapped inputs
@@ -190,14 +214,17 @@ export class LangChainService {
 
   /**
    * Batch generate responses (for testing multiple questions)
+   * ✅ NOW ACCEPTS SETTINGS parameter
    */
   async batchGenerate(
     context: AgentContext,
     questions: string[],
-    relevantContext: string[]
+    relevantContext: string[],
+    settings?: { temperature?: number; maxTokens?: number } // ✅ NEW parameter
   ): Promise<string[]> {
     try {
-      const chain = this.createAgentChain(context);
+      // ✅ Pass settings to chain creation
+      const chain = this.createAgentChain(context, settings);
 
       const contextText =
         relevantContext.length > 0
@@ -226,15 +253,18 @@ export class LangChainService {
 
   /**
    * Stream response (for real-time chat UIs)
+   * ✅ NOW ACCEPTS SETTINGS parameter
    */
   async streamResponse(
     context: AgentContext,
     userMessage: string,
     relevantContext: string[],
-    onToken: (token: string) => void
+    onToken: (token: string) => void,
+    settings?: { temperature?: number; maxTokens?: number } // ✅ NEW parameter
   ): Promise<void> {
     try {
-      const chain = this.createAgentChain(context);
+      // ✅ Pass settings to chain creation
+      const chain = this.createAgentChain(context, settings);
 
       const contextText =
         relevantContext.length > 0

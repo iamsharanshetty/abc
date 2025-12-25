@@ -268,6 +268,14 @@ async function handleStreamingChat(
           )
         );
 
+        // ✅ Extract model parameters from settings
+        const modelSettings = settings
+          ? {
+              temperature: settings.temperature,
+              maxTokens: settings.maxTokens,
+            }
+          : undefined;
+
         let fullResponse = "";
         let tokenCount = 0;
 
@@ -291,7 +299,8 @@ async function handleStreamingChat(
                 )
               )
             );
-          }
+          },
+          modelSettings
         );
 
         await aiService.saveConversationPublic(

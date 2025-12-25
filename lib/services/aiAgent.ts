@@ -540,11 +540,19 @@ Answer:`;
       const extractedLeadData = this.extractLeadData(userMessage);
 
       // Step 3: Generate response using LangChain
+      // ✅ Extract model parameters from settings
+      const modelSettings = settings
+        ? {
+            temperature: settings.temperature,
+            maxTokens: settings.maxTokens,
+          }
+        : undefined;
+
       const assistantResponse = await this._langChainService.generateResponse(
-        // ✅ Use underscore
         context,
         userMessage,
-        relevantContent
+        relevantContent,
+        modelSettings // ✅ Pass settings here
       );
       // Step 4: Save conversation to database
       await this.saveConversation(
