@@ -215,7 +215,13 @@ async function chatHandler(request: NextRequest) {
 }
 
 /**
- * Handle streaming chat response
+ * Handle streaming chat response with graceful partial failure handling
+ *
+ * KEY IMPROVEMENTS:
+ * ✅ Tracks partial response even if streaming fails
+ * ✅ Saves conversation with whatever content was received
+ * ✅ Proper error recovery and user notification
+ * ✅ Maintains conversation history integrity
  */
 async function handleStreamingChat(
   context: AgentContext,
@@ -228,6 +234,13 @@ async function handleStreamingChat(
   });
 
   const encoder = new TextEncoder();
+
+  // ✅ NEW: Track state outside the stream for error recovery
+  let fullResponse = "";
+  let streamingError: Error | null = null;
+  let metadataSent = false;
+  let doneSent = false;
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -255,6 +268,7 @@ async function handleStreamingChat(
 
         const extractedLeadData = aiService.extractLeadDataPublic(message);
 
+        // Send metadata
         controller.enqueue(
           encoder.encode(
             formatSSE(
@@ -267,8 +281,8 @@ async function handleStreamingChat(
             )
           )
         );
+        metadataSent = true;
 
-        // ✅ Extract model parameters from settings
         const modelSettings = settings
           ? {
               temperature: settings.temperature,
@@ -276,40 +290,70 @@ async function handleStreamingChat(
             }
           : undefined;
 
-        let fullResponse = "";
         let tokenCount = 0;
 
-        await aiService.langChainService.streamResponse(
-          context,
-          message,
-          relevantContent,
-          (token: string) => {
-            fullResponse += token;
-            tokenCount++;
+        // ✅ CRITICAL FIX: Wrap streaming in try-catch to capture partial responses
+        try {
+          await aiService.langChainService.streamResponse(
+            context,
+            message,
+            relevantContent,
+            (token: string) => {
+              fullResponse += token;
+              tokenCount++;
 
-            controller.enqueue(
-              encoder.encode(
-                formatSSE(
-                  {
-                    type: "token",
-                    token,
-                    tokenCount,
-                  },
-                  "token"
-                )
-              )
-            );
-          },
-          modelSettings
-        );
+              // ✅ NEW: Guard against controller errors
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    formatSSE(
+                      {
+                        type: "token",
+                        token,
+                        tokenCount,
+                      },
+                      "token"
+                    )
+                  )
+                );
+              } catch (enqueueError) {
+                logger.warn("Error enqueueing token, stream may be closed", {
+                  error: enqueueError,
+                  conversationId,
+                });
+                // Don't throw - we want to save what we have
+              }
+            },
+            modelSettings
+          );
+        } catch (streamError) {
+          // ✅ NEW: Capture streaming error but don't throw yet
+          streamingError = streamError as Error;
+          logger.error("Streaming failed mid-response", {
+            error: streamError,
+            conversationId,
+            partialResponseLength: fullResponse.length,
+            tokenCount,
+          });
+        }
 
-        await aiService.saveConversationPublic(
+        // ✅ CRITICAL: Save conversation REGARDLESS of streaming success
+        // This ensures we never lose conversation history
+        const conversationSaved = await aiService.saveConversationPublic(
           conversationId,
           context.agentId,
           message,
-          fullResponse
+          fullResponse || "[Response generation interrupted]" // ✅ Fallback for empty response
         );
 
+        if (!conversationSaved) {
+          logger.error("Failed to save conversation after streaming", {
+            conversationId,
+            hadStreamingError: !!streamingError,
+          });
+        }
+
+        // ✅ CRITICAL: Handle lead capture even if streaming failed
         let leadId: string | null = null;
         if (extractedLeadData || hasInterestSignal) {
           if (extractedLeadData) {
@@ -334,48 +378,116 @@ async function handleStreamingChat(
           }
         }
 
-        controller.enqueue(
-          encoder.encode(
-            formatSSE(
-              {
-                type: "done",
-                conversationId,
-                fullResponse,
-                leadDetected: !!(extractedLeadData || hasInterestSignal),
-                leadData: extractedLeadData || undefined,
-                tokenCount,
-              },
-              "done"
+        // ✅ NEW: Send appropriate completion event based on outcome
+        if (streamingError) {
+          // Streaming failed, but we saved partial response
+          controller.enqueue(
+            encoder.encode(
+              formatSSE(
+                {
+                  type: "partial_completion",
+                  conversationId,
+                  partialResponse: fullResponse,
+                  error:
+                    "Response generation was interrupted. Your message was saved.",
+                  conversationSaved,
+                  leadDetected: !!(extractedLeadData || hasInterestSignal),
+                  leadData: extractedLeadData || undefined,
+                  tokenCount,
+                },
+                "partial_completion"
+              )
             )
-          )
-        );
+          );
+        } else {
+          // Normal successful completion
+          controller.enqueue(
+            encoder.encode(
+              formatSSE(
+                {
+                  type: "done",
+                  conversationId,
+                  fullResponse,
+                  leadDetected: !!(extractedLeadData || hasInterestSignal),
+                  leadData: extractedLeadData || undefined,
+                  tokenCount,
+                },
+                "done"
+              )
+            )
+          );
+        }
+        doneSent = true;
 
         logger.info("Streaming chat completed", {
           conversationId,
           tokenCount,
+          hadStreamingError: !!streamingError,
+          conversationSaved,
           leadDetected: !!(extractedLeadData || hasInterestSignal),
         });
 
         controller.close();
       } catch (error) {
-        logger.error("Error in streaming chat", { error, conversationId });
+        // ✅ ENHANCED: Outer error handler for catastrophic failures
+        logger.error("Catastrophic error in streaming chat", {
+          error,
+          conversationId,
+          partialResponse: fullResponse,
+          metadataSent,
+          doneSent,
+        });
+
+        // ✅ CRITICAL: Attempt to save partial conversation even on catastrophic failure
+        if (fullResponse.length > 0) {
+          try {
+            const aiService = new AIAgentService();
+            await aiService.saveConversationPublic(
+              conversationId,
+              context.agentId,
+              message,
+              fullResponse + " [Interrupted due to error]"
+            );
+            logger.info(
+              "Saved partial conversation after catastrophic failure",
+              {
+                conversationId,
+                partialLength: fullResponse.length,
+              }
+            );
+          } catch (saveError) {
+            logger.error("Failed to save partial conversation", {
+              conversationId,
+              error: saveError,
+            });
+          }
+        }
 
         const errorMessage = ErrorHandlingService.handleChatError(error, {
           agentId: context.agentId,
           sessionId: conversationId,
         });
 
-        controller.enqueue(
-          encoder.encode(
-            formatSSE(
-              {
-                type: "error",
-                error: errorMessage,
-              },
-              "error"
-            )
-          )
-        );
+        // ✅ NEW: Only send error event if we haven't sent done yet
+        if (!doneSent) {
+          try {
+            controller.enqueue(
+              encoder.encode(
+                formatSSE(
+                  {
+                    type: "error",
+                    error: errorMessage,
+                    conversationId,
+                    partialResponse: fullResponse || undefined,
+                  },
+                  "error"
+                )
+              )
+            );
+          } catch (enqueueError) {
+            logger.error("Failed to send error event", { enqueueError });
+          }
+        }
 
         controller.close();
       }
