@@ -1,5 +1,6 @@
 // lib/services/errorHandlingService.ts - ENHANCED VERSION
 // ✅ Fixed: Deterministic error message selection with logging for traceability
+// ✅ Fixed: Improved hash function with better collision resistance
 
 import { logger } from "@/lib/utils/logger";
 
@@ -57,7 +58,7 @@ export class ErrorHandlingService {
       error,
       context
     );
-    
+
     errorContext.userMessage = message;
     errorContext.messageIndex = messageIndex; // ✅ Track which message was shown
 
@@ -75,7 +76,7 @@ export class ErrorHandlingService {
 
     const errorMessage = error.message || error.toString().toLowerCase();
     const errorCode = error.code || error.status;
-    
+
     // Extract HTTP status from OpenAI error structure
     const httpStatus = error?.response?.status || error?.status || errorCode;
 
@@ -136,12 +137,12 @@ export class ErrorHandlingService {
 
   /**
    * ✅ FIXED: Get user-friendly error message with deterministic selection
-   * 
+   *
    * Selection strategy:
    * 1. Primary message (index 0): Used for first occurrence
    * 2. Secondary message (index 1): Used for subsequent occurrences
    * 3. Selection based on session context for consistency
-   * 
+   *
    * @returns Object with message and messageIndex for logging
    */
   private static getUserFriendlyMessage(
@@ -186,7 +187,7 @@ export class ErrorHandlingService {
     // ✅ DETERMINISTIC SELECTION: Use context to consistently pick same message
     // This makes debugging easier - same error type will show same message for same session
     let messageIndex = 0;
-    
+
     if (context?.sessionId) {
       // Use session ID hash to deterministically select message
       // This ensures same session gets same error message for consistency
@@ -208,16 +209,41 @@ export class ErrorHandlingService {
   }
 
   /**
-   * ✅ NEW: Simple hash function for deterministic message selection
-   * Converts string to consistent number for message index selection
+   * ✅ IMPROVED: DJB2 hash function for deterministic message selection
+   *
+   * PURPOSE: This hash function is used ONLY for selecting which error message
+   * variant to display to users. It ensures the same session/agent consistently
+   * sees the same message variant for better UX.
+   *
+   * SECURITY NOTE: This is NOT used for cryptographic purposes. The DJB2 algorithm
+   * provides good distribution and low collision rates for our use case (selecting
+   * from 2-3 message variants). Collisions are acceptable here as they only affect
+   * which error message variant is shown, not security or functionality.
+   *
+   * ALGORITHM: DJB2 by Dan Bernstein
+   * - Well-tested and widely used for non-cryptographic hashing
+   * - Excellent distribution properties for short strings
+   * - Fast and simple implementation
+   * - Much better collision resistance than the previous implementation
+   *
+   * @param str - The string to hash (typically sessionId or agentId)
+   * @returns A positive integer hash value
+   *
+   * @see http://www.cse.yorku.ca/~oz/hash.html for algorithm details
    */
   private static hashString(str: string): number {
-    let hash = 0;
+    // DJB2 hash algorithm - starts with magic number 5381
+    let hash = 5381;
+
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      // hash * 33 + char (bitshift optimization: hash * 33 = hash << 5 + hash)
+      hash = (hash << 5) + hash + char;
+      // Convert to 32-bit integer to prevent overflow
+      hash = hash & hash;
     }
+
+    // Return absolute value to ensure positive index
     return Math.abs(hash);
   }
 
@@ -341,8 +367,7 @@ export class ErrorHandlingService {
         lastError = error;
 
         // Check if we should retry
-        const { shouldRetry, useExtendedDelay } =
-          this.isRetryableError(error);
+        const { shouldRetry, useExtendedDelay } = this.isRetryableError(error);
 
         if (!shouldRetry) {
           logger.debug("Error is not retryable", {
