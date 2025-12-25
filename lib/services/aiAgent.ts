@@ -798,10 +798,11 @@ Answer:`;
     try {
       const supabase = createServiceClient();
 
-      console.log("=== Submitting Feedback ===");
-      console.log("Conversation ID:", conversationId);
-      console.log("Rating:", rating);
-      console.log("Comment:", comment);
+      logger.debug("Submitting feedback", {
+        conversationId,
+        rating,
+        hasComment: !!comment,
+      });
 
       // First, check if conversation exists
       const { data: existingConv, error: checkError } = await supabase
@@ -810,8 +811,10 @@ Answer:`;
         .eq("id", conversationId)
         .single();
 
-      console.log("Existing conversation found:", existingConv);
-      console.log("Check error:", checkError);
+      logger.debug("Existing conversation check", {
+        found: !!existingConv,
+        hasError: !!checkError,
+      });
 
       if (checkError || !existingConv) {
         logger.error("Conversation not found for feedback", {
@@ -832,8 +835,10 @@ Answer:`;
         .eq("id", conversationId)
         .select();
 
-      console.log("Update result:", data);
-      console.log("Update error:", error);
+      logger.debug("Feedback update result", {
+        success: !!data && !error,
+        hasError: !!error,
+      });
 
       if (error) {
         logger.error("Error submitting feedback", { error, conversationId });
@@ -841,11 +846,9 @@ Answer:`;
       }
 
       logger.info("Feedback submitted", { conversationId, rating });
-      console.log("✅ Feedback saved successfully");
       return true;
     } catch (error) {
       logger.error("Error in submitFeedback", { error });
-      console.error("Exception in submitFeedback:", error);
       return false;
     }
   }
@@ -862,8 +865,7 @@ Answer:`;
     try {
       const supabase = createServiceClient();
 
-      console.log("=== Getting Feedback Stats ===");
-      console.log("Agent ID:", agentId);
+      logger.debug("Getting feedback stats", { agentId });
 
       // First, check if agent exists
       const { data: agent, error: agentError } = await supabase
@@ -872,8 +874,10 @@ Answer:`;
         .eq("id", agentId)
         .single();
 
-      console.log("Agent found:", agent);
-      console.log("Agent error:", agentError);
+      logger.debug("Agent lookup for feedback stats", {
+        found: !!agent,
+        hasError: !!agentError,
+      });
 
       if (agentError || !agent) {
         logger.error("Agent not found for feedback stats", { agentId });
@@ -892,13 +896,13 @@ Answer:`;
         .eq("agent_id", agentId)
         .not("feedback_rating", "is", null);
 
-      console.log("Feedback data found:", data);
-      console.log("Feedback count:", data?.length);
-      console.log("Feedback error:", error);
+      logger.debug("Feedback data retrieved", {
+        count: data?.length || 0,
+        hasError: !!error,
+      });
 
       if (error) {
         logger.error("Error getting feedback stats", { error, agentId });
-        console.error("Query error:", error);
         throw error;
       }
 
@@ -917,13 +921,11 @@ Answer:`;
         satisfactionRate: Math.round(satisfactionRate * 100) / 100,
       };
 
-      console.log("Calculated stats:", stats);
       logger.info("Feedback stats retrieved", { agentId, stats });
 
       return stats;
     } catch (error) {
       logger.error("Error getting feedback stats", { error });
-      console.error("Exception in getFeedbackStats:", error);
       return {
         totalFeedback: 0,
         positiveCount: 0,
