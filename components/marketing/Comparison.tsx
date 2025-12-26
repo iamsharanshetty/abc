@@ -1,60 +1,50 @@
-export function Comparison() {
-    const items = [
-        { name: 'WebRep', score: 92, color: 'bg-blue-600' },
-        { name: 'Traditional Chatbots', score: 54, color: 'bg-slate-400' },
-        { name: 'AI Widgets', score: 49, color: 'bg-slate-300' },
-        { name: 'Generic Support AI', score: 40, color: 'bg-slate-200' },
-    ];
+"use client";
 
+import { Check, X } from "lucide-react";
+
+export function Comparison() {
     return (
-        <section className="py-24 bg-slate-50 dark:bg-slate-900/50">
+        <section className="py-24 bg-secondary/30">
             <div className="container mx-auto px-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                    <div>
-                        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-6">
-                            WebRep vs Other AI Solutions: <br />
-                            <span className="text-blue-600">The Conversion Advantage</span>
-                        </h2>
-                        <p className="text-lg text-slate-600 dark:text-slate-300 mb-8 leading-relaxed">
-                            WebRep leads because it is trained for one purpose: turning visitors into customers.
-                            While others focus on generic support or basic scripts, we focus on understanding user intent and driving action.
-                        </p>
-                        <div className="space-y-6">
-                            <div className="flex items-start gap-4">
-                                <div className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center mt-1">✓</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Context Aware</h4>
-                                    <p className="text-sm text-slate-500">Understands your full site context</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-4">
-                                <div className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center mt-1">✓</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Zero Setup</h4>
-                                    <p className="text-sm text-slate-500">Just enter your URL and go</p>
-                                </div>
-                            </div>
-                        </div>
+                <div className="text-center max-w-3xl mx-auto mb-16">
+                    <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-6 tracking-tight">
+                        Why WebRep Wins
+                    </h2>
+                    <p className="text-xl text-muted-foreground">
+                        Stop settling for dumb chatbots. Upgrade to an intelligent agent.
+                    </p>
+                </div>
+
+                <div className="max-w-5xl mx-auto bg-card rounded-3xl border border-border shadow-2xl overflow-hidden">
+                    <div className="grid grid-cols-3 bg-secondary/50 p-6 text-sm font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+                        <div className="col-span-1">Feature</div>
+                        <div className="col-span-1 text-center text-foreground font-bold">WebRep</div>
+                        <div className="col-span-1 text-center">Standard Chatbots</div>
                     </div>
 
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700">
-                        <h3 className="text-lg font-semibold mb-8 text-slate-900 dark:text-white">Performance Score (G2 Equivalent)</h3>
-                        <div className="space-y-6">
-                            {items.map((item) => (
-                                <div key={item.name}>
-                                    <div className="flex justify-between text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
-                                        <span>{item.name}</span>
-                                        <span>{item.score}</span>
-                                    </div>
-                                    <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`}
-                                            style={{ width: `${item.score}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
+                    {[
+                        { feature: "Understanding", webrep: "Full Context Awareness", other: "Keywords Only" },
+                        { feature: "Setup Actions", webrep: "Automatic Scraping", other: "Manual Data Entry" },
+                        { feature: "Goal Alignment", webrep: "Sales & Conversion", other: "Support Tickets" },
+                        { feature: "Tone Matching", webrep: "Custom Brand Voice", other: "Robotic / Generic" },
+                        { feature: "Integrations", webrep: "1-Click Connect", other: "Complex API Setup" },
+                        { feature: "Pricing", webrep: "Performance Based", other: "Per Seat / Monthly" }
+                    ].map((row, i) => (
+                        <div key={i} className="grid grid-cols-3 p-6 border-b border-border hover:bg-secondary/20 transition-colors items-center">
+                            <div className="col-span-1 font-medium text-foreground">{row.feature}</div>
+                            <div className="col-span-1 text-center font-bold text-blue-600 flex justify-center items-center gap-2">
+                                <span className="bg-blue-100 dark:bg-blue-900/30 p-1 rounded-full"><Check className="w-4 h-4" /></span>
+                                {row.webrep}
+                            </div>
+                            <div className="col-span-1 text-center text-muted-foreground flex justify-center items-center gap-2 opacity-70">
+                                <span className="bg-slate-100 dark:bg-slate-800 p-1 rounded-full"><X className="w-4 h-4" /></span>
+                                {row.other}
+                            </div>
                         </div>
+                    ))}
+
+                    <div className="p-8 text-center bg-secondary/10">
+                        <p className="text-muted-foreground italic">"The difference in quality was noticeable immediately."</p>
                     </div>
                 </div>
             </div>

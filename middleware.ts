@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
                 getAll() {
                     return request.cookies.getAll();
                 },
-                setAll(cookiesToSet) {
+                setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
                     cookiesToSet.forEach(({ name, value, options }) =>
                         request.cookies.set(name, value)
                     );
@@ -36,15 +36,15 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     // Protect /dashboard routes
-    /*
-    if (request.nextUrl.pathname.startsWith("/dashboard")) {
-        if (!user) {
+    // Protect /dashboard and /onboarding routes
+    if (request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/onboarding") || request.nextUrl.pathname.startsWith("/agent-setup")) {
+        const hasDevAuth = request.cookies.get("dev-auth")?.value === "true";
+        if (!user && !hasDevAuth) {
             const loginUrl = new URL("/login", request.url);
             loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
             return NextResponse.redirect(loginUrl);
         }
     }
-    */
 
     // Optional: Redirect root / to /dashboard if logged in
     if (request.nextUrl.pathname === "/" && user) {
