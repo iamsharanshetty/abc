@@ -1058,7 +1058,10 @@ Answer:`;
       });
 
       if (error) {
-        logger.error("Error saving public conversation", { error, conversationId });
+        logger.error("Error saving public conversation", {
+          error,
+          conversationId,
+        });
         return false;
       }
 
@@ -1165,7 +1168,8 @@ Answer:`;
         return;
       }
 
-      const settings = agent.settings as AgentSettings;
+      // ✅ FIXED: Proper type assertion
+      const settings = agent.settings as unknown as AgentSettings;
 
       // Prepare full lead data
       const fullLeadData: LeadData = {
@@ -1226,8 +1230,6 @@ Answer:`;
     } catch (error) {
       logger.error("Error in sendLeadNotificationsPublic", { error });
     }
-  }
-
   }
 
   // Also expose the LangChain service
