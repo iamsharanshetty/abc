@@ -1,7 +1,6 @@
 // lib/config.ts
 import { z } from "zod";
 
-// Define the schema for environment variables
 const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, "OpenAI API key is required"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL"),
@@ -9,7 +8,6 @@ const envSchema = z.object({
     .string()
     .min(1, "Supabase anon key is required"),
 
-  // Optional configuration
   LOG_LEVEL: z
     .enum(["debug", "development", "production"])
     .optional()
@@ -22,11 +20,11 @@ const envSchema = z.object({
   CHUNK_OVERLAP: z.string().optional().default("200"),
 });
 
-// Validate environment variables
 function validateEnv() {
   try {
     return envSchema.parse({
-      OPENAI_API_KEY: process.env.ALENTA_OPENAI_KEY || process.env.OPENAI_API_KEY,
+      OPENAI_API_KEY:
+        process.env.ALENTA_OPENAI_KEY || process.env.OPENAI_API_KEY,
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       LOG_LEVEL: process.env.LOG_LEVEL,
@@ -48,10 +46,8 @@ function validateEnv() {
   }
 }
 
-// Validate on startup
 const env = validateEnv();
 
-// Configuration object with type safety
 export const config = {
   openai: {
     apiKey: env.OPENAI_API_KEY,
@@ -72,24 +68,72 @@ export const config = {
     chunkSize: parseInt(env.CHUNK_SIZE || "1000"),
     chunkOverlap: parseInt(env.CHUNK_OVERLAP || "200"),
     maxConcurrentRequests: 5,
-    minQualityScore: parseInt(env.MIN_QUALITY_SCORE || "20"), // NEW
+    minQualityScore: parseInt(env.MIN_QUALITY_SCORE || "20"),
   },
   rateLimit: {
     maxRequestsPerMinute: parseInt(env.MAX_REQUESTS_PER_MINUTE || "50"),
     requestWindow: parseInt(env.REQUEST_WINDOW_MS || "60000"),
   },
   scraping: {
-    httpTimeout: 20000, // NEW
-    browserTimeout: 30000, // NEW
-    pageWaitTime: 2000, // NEW
-    retryAttempts: 3, // NEW
+    httpTimeout: 20000,
+    browserTimeout: 30000,
+    pageWaitTime: 2000,
+    retryAttempts: 3,
+  },
+  // ✅ NEW: Intent detection configuration
+  intentDetection: {
+    // Strong keywords that immediately indicate intent (no LLM needed)
+    strongKeywords: [
+      "buy now",
+      "purchase now",
+      "sign me up",
+      "place an order",
+      "ready to buy",
+      "checkout",
+      "add to cart",
+      "subscribe now",
+      "get started now",
+    ],
+    // Moderate keywords that suggest intent (check cache, then LLM if needed)
+    moderateKeywords: [
+      "buy",
+      "purchase",
+      "demo",
+      "quote",
+      "pricing",
+      "price",
+      "cost",
+      "trial",
+      "interested",
+      "contact",
+      "schedule",
+      "book",
+      "sign up",
+      "register",
+    ],
+    // Negative keywords that cancel intent detection
+    negativeKeywords: [
+      "don't want",
+      "not interested",
+      "no thanks",
+      "cancel",
+      "unsubscribe",
+      "not now",
+      "maybe later",
+      "just browsing",
+      "just looking",
+    ],
+    // Cache TTL in milliseconds (1 hour)
+    cacheTTL: 60 * 60 * 1000,
+    // Maximum cache size (number of entries)
+    maxCacheSize: 1000,
   },
 } as const;
 
-// Type exports
 export type Config = typeof config;
 export type OpenAIConfig = typeof config.openai;
 export type SupabaseConfig = typeof config.supabase;
 export type IngestionConfig = typeof config.ingestion;
 export type RateLimitConfig = typeof config.rateLimit;
 export type ScrapingConfig = typeof config.scraping;
+export type IntentDetectionConfig = typeof config.intentDetection;

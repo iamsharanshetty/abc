@@ -1,5 +1,10 @@
 "use client";
 
+<<<<<<< HEAD
+=======
+// ✅ Correct imports for AI SDK v4
+import { useChat } from "@ai-sdk/react";
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
 import { useState, useRef, useEffect } from "react";
 import { Send, X, MessageCircle, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,6 +16,7 @@ interface ChatWidgetProps {
   title?: string;
 }
 
+<<<<<<< HEAD
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -226,6 +232,51 @@ export function ChatWidget({
 
   const bgPrimary = { backgroundColor: primaryColor };
 
+=======
+export function ChatWidget({
+  agentId,
+  websiteUrl,
+  primaryColor = "#2563eb",
+  title = "WebRep AI",
+}: ChatWidgetProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [input, setInput] = useState("");
+
+  // ✅ AI SDK v4 useChat - simplified configuration
+  const { messages, isLoading, error, append, setMessages } = useChat({
+    api: "/api/v2/chat",
+    body: {
+      agentId,
+      websiteUrl,
+    },
+    onError: (err: Error) => {
+      console.error("Chat error:", err);
+    },
+  });
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    append({ role: "user", content: input });
+    setInput("");
+  };
+
+  const bgPrimary = { backgroundColor: primaryColor };
+
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
   return (
     <div
       className={cn(
@@ -288,7 +339,11 @@ export function ChatWidget({
             >
               <div
                 className={cn(
+<<<<<<< HEAD
                   "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm shadow-sm whitespace-pre-wrap",
+=======
+                  "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm shadow-sm",
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
                   m.role === "user"
                     ? "text-white rounded-br-none"
                     : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-none"
@@ -312,6 +367,7 @@ export function ChatWidget({
 
           {error && (
             <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2">
+<<<<<<< HEAD
               <span>{error}</span>
               <button
                 onClick={() => reload()}
@@ -319,6 +375,9 @@ export function ChatWidget({
               >
                 Retry
               </button>
+=======
+              <span>Something went wrong. Please try again.</span>
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
             </div>
           )}
 
@@ -327,17 +386,29 @@ export function ChatWidget({
 
         {/* Input Area */}
         <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 h-[84px]">
+<<<<<<< HEAD
           <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
             <input
               className="flex-1 bg-slate-100 dark:bg-slate-800 p-3 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500/50 dark:text-white transition-all pl-4"
               value={localInput}
               onChange={(e) => setLocalInput(e.target.value)}
+=======
+          <form onSubmit={handleSubmit} className="flex items-center gap-2">
+            <input
+              className="flex-1 bg-slate-100 dark:bg-slate-800 p-3 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500/50 dark:text-white transition-all pl-4"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
               placeholder="Type a message..."
               disabled={isLoading}
             />
             <button
               type="submit"
+<<<<<<< HEAD
               disabled={isLoading || !localInput.trim()}
+=======
+              disabled={isLoading || !input.trim()}
+>>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
               className="p-3 rounded-full text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all transform active:scale-95"
               style={bgPrimary}
             >

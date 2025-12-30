@@ -71,6 +71,47 @@ class Logger {
   error(message: string, data?: any) {
     this.log(LogLevel.ERROR, message, data);
   }
+
+  /**
+   * Log polling progress with consistent structure
+   */
+  pollingProgress(
+    stage: "start" | "response" | "progress" | "complete" | "error",
+    jobId: string,
+    data?: {
+      attempt?: number;
+      maxAttempts?: number;
+      status?: string;
+      progress?: number;
+      stepIndex?: number;
+      totalSteps?: number;
+      pagesProcessed?: number;
+      embeddingsCreated?: number;
+      error?: string;
+    }
+  ) {
+    const messages = {
+      start: "Polling job status",
+      response: "Job status response received",
+      progress: "Progress updated",
+      complete: "Job completed successfully",
+      error: "Error polling job status",
+    };
+
+    const logData = {
+      jobId,
+      ...data,
+    };
+
+    // Use appropriate log level for each stage
+    if (stage === "error") {
+      this.error(messages[stage], logData);
+    } else if (stage === "complete") {
+      this.info(messages[stage], logData); // ✅ Use info for completion
+    } else {
+      this.debug(messages[stage], logData);
+    }
+  }
 }
 
 export const logger = new Logger();

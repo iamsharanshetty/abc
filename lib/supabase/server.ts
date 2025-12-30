@@ -29,3 +29,7 @@ export async function createClient() {
     }
   );
 }
+
+// ✅ Export helper types for easy access
+export type { Database } from "../database.types";
+export * from "./helpers";

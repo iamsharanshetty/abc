@@ -1,0 +1,81 @@
+{
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.88",
+<<<<<<< HEAD
+    "@langchain/community": "^1.1.0",
+    "@langchain/core": "^1.1.6",
+    "@langchain/openai": "^1.2.0",
+=======
+    "@ai-sdk/react": "^2.0.117",
+>>>>>>> origin/staging
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-radio-group": "^1.3.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.86.0",
+    "@trigger.dev/sdk": "4.3.0",
+    "ai": "^5.0.115",
+    "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+<<<<<<< HEAD
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.8.2",
+    "langchain": "^1.2.1",
+    "libphonenumber-js": "^1.12.33",
+=======
+    "framer-motion": "^12.23.26",
+>>>>>>> origin/staging
+    "lucide-react": "^0.555.0",
+    "next": "16.0.10",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^7.0.11",
+    "openai": "^6.9.1",
+    "puppeteer": "^24.31.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "resend": "^6.6.0",
+    "tailwind-merge": "^3.4.0",
+    "vercel": "^50.1.2",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@trigger.dev/build": "4.3.0",
+    "@types/cheerio": "^0.22.35",
+    "@types/node": "^20",
+    "@types/nodemailer": "^7.0.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/ui": "^4.0.15",
+    "dotenv": "^17.2.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.4",
+    "jsdom": "^27.2.0",
+    "supabase": "^2.63.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.0.15"
+  },
+  "name": "webrep",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "next lint",
+    "start": "next start",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui"
+  },
+  "version": "0.1.0"
+}
