@@ -1,7 +1,6 @@
 "use client";
 
 import {
-<<<<<<< HEAD
     Brain,
     Zap,
     Compass,
@@ -39,7 +38,6 @@ function FeatureCard({ feature, className }: { feature: any, className?: string 
                 className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
                 style={{
                     background: useMotionTemplate`
-=======
   Brain,
   Zap,
   Compass,
@@ -92,14 +90,12 @@ function FeatureCard({
         className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
         style={{
           background: useMotionTemplate`
->>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
                         radial-gradient(
                           650px circle at ${mouseX}px ${mouseY}px,
                           rgba(59, 130, 246, 0.1),
                           transparent 80%
                         )
                       `,
-<<<<<<< HEAD
                 }}
             />
             <div className="relative z-10 h-full flex flex-col">
@@ -226,7 +222,6 @@ export function Features() {
             </div>
         </section>
     );
-=======
         }}
       />
       <div className="relative z-10 h-full flex flex-col">
@@ -370,5 +365,4 @@ export function Features() {
       </div>
     </section>
   );
->>>>>>> ale-27-integrate-openai-api-for-agent-prompt-development-testing
 }
