@@ -8,6 +8,10 @@ import {
   withRateLimit,
   analyticsRateLimiter,
 } from "@/lib/middleware/rateLimiter";
+import type { Database } from "@/lib/database.types";
+
+// ✅ Use the exact database type for agents
+type AgentRow = Database["public"]["Tables"]["agents"]["Row"];
 
 /**
  * GET /api/v2/agents/test/questions?agentId=xxx - Get suggested test questions
@@ -23,18 +27,23 @@ async function agentSuggestQuestionsHandler(request: NextRequest) {
 
     // Get agent details
     const supabase = await createClient();
-    const { data: agent, error: agentError } = await supabase
+
+    // ✅ FIX: Cast the data type after fetching
+    const { data, error: agentError } = await supabase
       .from("agents")
       .select("*")
       .eq("id", agentId)
       .single();
 
-    if (agentError || !agent) {
+    if (agentError || !data) {
       throw new ValidationError("Agent not found");
     }
 
-    // Generate role-specific test questions
-    const role = agent.role;
+    // ✅ Cast to the correct type
+    const agent = data as AgentRow;
+
+    // ✅ Now TypeScript correctly knows agent.role exists and is a string
+    const role = agent.role || "support";
     const suggestedQuestions = generateTestQuestions(role);
 
     return NextResponse.json({
@@ -81,6 +90,13 @@ function generateTestQuestions(role: string): string[] {
       "Can you show me how to use [feature]?",
       "Are there any tutorials available?",
       "What are best practices for using this?",
+    ],
+    custom: [
+      "What can you help me with?",
+      "Tell me about your services",
+      "How do I get started?",
+      "What makes you different?",
+      "Can you provide more information?",
     ],
   };
 

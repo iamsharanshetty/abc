@@ -1,50 +1,48 @@
+"use client";
+
+import { motion } from 'framer-motion';
+
 export function Stats() {
     return (
-        <section className="py-24 relative overflow-hidden">
-            {/* Background gradient blob */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] -z-10" />
-
+        <section className="py-24 bg-background relative overflow-hidden">
             <div className="container mx-auto px-4">
-                <div className="text-center mb-16">
-                    <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
-                        The Top Performing AI Agent for Website Conversions
-                    </h2>
-                    <p className="text-lg text-slate-600 dark:text-slate-300">
-                        Real results from businesses using WebRep.
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-8 items-center max-w-5xl mx-auto">
                     {/* Stat 1 */}
-                    <div className="relative p-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl text-center overflow-hidden group">
-                        <div className="absolute inset-0 bg-blue-600/5 group-hover:bg-blue-600/10 transition-colors" />
-                        <div className="relative">
-                            <div className="text-6xl font-black text-blue-600 dark:text-blue-400 mb-2">
-                                42%
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">
-                                Conversion Improvement
-                            </h3>
-                            <p className="text-slate-600 dark:text-slate-300">
-                                WebRep users see an average lift of up to 42 percent in conversions after adding an AI Website Representative that guides visitors in real time.
-                            </p>
-                        </div>
+                    <div className="text-center md:text-left group cursor-default">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            whileInView={{ opacity: 1, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.5 }}
+                            className="text-8xl md:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-blue-600 to-violet-600 mb-2"
+                        >
+                            42%
+                        </motion.div>
+                        <h3 className="text-2xl font-bold text-foreground tracking-tight mb-2">
+                            Increase in Conversion Rate
+                        </h3>
+                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm mx-auto md:mx-0">
+                            Businesses using WebRep see a significant lift in visitor engagement and lead capture within the first 30 days.
+                        </p>
                     </div>
 
                     {/* Stat 2 */}
-                    <div className="relative p-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl text-center overflow-hidden group">
-                        <div className="absolute inset-0 bg-emerald-600/5 group-hover:bg-emerald-600/10 transition-colors" />
-                        <div className="relative">
-                            <div className="text-6xl font-black text-emerald-600 dark:text-emerald-400 mb-2">
-                                99.4%
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">
-                                Accuracy Rate
-                            </h3>
-                            <p className="text-slate-600 dark:text-slate-300">
-                                WebRep delivers highly accurate, context-aware responses powered directly by your website’s content, making it one of the most reliable AI website agents available.
-                            </p>
-                        </div>
+                    <div className="text-center md:text-left md:pl-12 border-l-0 md:border-l border-border/50 group cursor-default">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            whileInView={{ opacity: 1, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.5, delay: 0.2 }}
+                            className="text-8xl md:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-500 mb-2"
+                        >
+                            99.9%
+                        </motion.div>
+                        <h3 className="text-2xl font-bold text-foreground tracking-tight mb-2">
+                            Response Accuracy
+                        </h3>
+                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm mx-auto md:mx-0">
+                            Powered by your content, WebRep delivers precise, context-aware answers without hallucinations.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -10,6 +10,10 @@ import {
   agentTestRateLimiter,
   analyticsRateLimiter,
 } from "@/lib/middleware/rateLimiter";
+import type { Database } from "@/lib/database.types";
+
+// ✅ Use the exact database type for agents
+type AgentRow = Database["public"]["Tables"]["agents"]["Row"];
 
 /**
  * POST /api/v2/agents/test - Test an agent with sample questions
@@ -43,16 +47,20 @@ async function agentTestHandler(request: NextRequest) {
 
     // Get agent details
     const supabase = await createClient();
-    const { data: agent, error: agentError } = await supabase
+    const { data, error: agentError } = await supabase
       .from("agents")
       .select("*")
       .eq("id", body.agentId)
       .single();
 
-    if (agentError || !agent) {
+    if (agentError || !data) {
       throw new ValidationError("Agent not found");
     }
 
+    // ✅ Cast to the correct type
+    const agent = data as AgentRow;
+
+    // ✅ Parse settings from JSONB column
     const settings = agent.settings as any;
     const websiteUrl = settings?.url;
 
@@ -165,15 +173,18 @@ async function agentSuggestQuestionsHandler(request: NextRequest) {
 
     // Get agent details
     const supabase = await createClient();
-    const { data: agent, error: agentError } = await supabase
+    const { data, error: agentError } = await supabase
       .from("agents")
       .select("*")
       .eq("id", agentId)
       .single();
 
-    if (agentError || !agent) {
+    if (agentError || !data) {
       throw new ValidationError("Agent not found");
     }
+
+    // ✅ Cast to the correct type
+    const agent = data as AgentRow;
 
     // Generate role-specific test questions
     const role = agent.role;
@@ -223,6 +234,13 @@ function generateTestQuestions(role: string): string[] {
       "Can you show me how to use [feature]?",
       "Are there any tutorials available?",
       "What are best practices for using this?",
+    ],
+    custom: [
+      "What can you help me with?",
+      "Tell me about your services",
+      "How do I get started?",
+      "What makes you different?",
+      "Can you provide more information?",
     ],
   };
 

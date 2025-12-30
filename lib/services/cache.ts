@@ -1,6 +1,10 @@
 // lib/services/cache.ts
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/utils/logger";
+import { Database } from "@/lib/database.types";
+
+// ✅ Define proper types from Database schema
+type WebsiteEmbedding = Database["public"]["Tables"]["website_embeddings"]["Row"];
 
 interface CacheEntry {
   websiteUrl: string;
@@ -178,7 +182,7 @@ export class CacheService {
   }
 
   // ============================================
-  // EXISTING WEBSITE CACHE METHODS (unchanged)
+  // EXISTING WEBSITE CACHE METHODS (FIXED)
   // ============================================
 
   /**
@@ -217,27 +221,31 @@ export class CacheService {
 
   /**
    * Get cache entry for a website
+   * ✅ FIXED: Properly typed with explicit type annotations
    */
   static async getCacheEntry(websiteUrl: string): Promise<CacheEntry | null> {
     try {
       const supabase = await createClient();
 
+      // ✅ FIX: Explicitly type the query result
       const { data, error } = await supabase
         .from("website_embeddings")
         .select("created_at")
         .eq("website_url", websiteUrl)
         .order("created_at", { ascending: false })
-        .limit(1);
+        .limit(1)
+        .maybeSingle<{ created_at: string }>(); // ✅ Explicit type for selected fields
 
       if (error) {
         logger.error("Database error checking cache", { error });
         return null;
       }
 
-      if (!data || data.length === 0) {
+      if (!data) {
         return null;
       }
 
+      // Get count of pages for this website
       const { count } = await supabase
         .from("website_embeddings")
         .select("page_url", { count: "exact", head: true })
@@ -245,7 +253,7 @@ export class CacheService {
 
       return {
         websiteUrl,
-        lastScraped: data[0].created_at,
+        lastScraped: data.created_at, // ✅ TypeScript now knows this exists!
         pagesCount: count || 0,
         status: "completed",
       };
@@ -295,6 +303,7 @@ export class CacheService {
 
   /**
    * Get cache statistics
+   * ✅ FIXED: Properly typed query results
    */
   static async getStats(): Promise<{
     totalWebsites: number;
@@ -304,10 +313,12 @@ export class CacheService {
     try {
       const supabase = await createClient();
 
+      // ✅ FIX: Explicitly type the query result
       const { data: websites, error: websitesError } = await supabase
         .from("website_embeddings")
         .select("website_url")
-        .limit(1000);
+        .limit(1000)
+        .returns<{ website_url: string }[]>(); // ✅ Explicit return type
 
       if (websitesError) {
         throw websitesError;

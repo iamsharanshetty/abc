@@ -3,185 +3,332 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Loader2, CheckCircle2, ArrowRight, Layout, MessageSquare } from 'lucide-react';
+import { Textarea } from '@/components/ui/Textarea';
+import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { saveOnboardingData } from '@/lib/actions/user';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-// import { ingestWebsite } from '@/lib/actions/ingest'; // Assuming existing action or we simulate
+import { cn } from '@/lib/utils';
 
-export default function OnboardingPage() {
+// New Question Structure with Types
+type QuestionType = 'choice' | 'text' | 'long_text';
+
+interface Question {
+    id: string;
+    type: QuestionType;
+    question: string;
+    options?: string[]; // Only for 'choice'
+    placeholder?: string; // Only for 'text'/'long_text'
+}
+
+const ONBOARDING_QUESTIONS: Question[] = [
+    {
+        id: 'hearing',
+        type: 'choice',
+        question: 'How did you first hear about WebRep?',
+        options: [
+            'Google Search',
+            'Social Media (LinkedIn / Twitter / Instagram)',
+            'Friend or Colleague',
+            'Online Community (Reddit / Discord / WhatsApp group)',
+            'Other'
+        ]
+    },
+    {
+        id: 'referral',
+        type: 'choice',
+        question: 'Did anyone refer you to WebRep?',
+        options: [
+            'No, I found it on my own',
+            'Yes, a friend',
+            'Yes, a colleague',
+            'Yes, a founder / startup contact',
+            'Yes, an online post or article'
+        ]
+    },
+    {
+        id: 'goal',
+        type: 'text', // NEW
+        question: 'What is your main goal for using AI Agents?',
+        placeholder: 'e.g. Automate support, Capture leads...'
+    },
+    {
+        id: 'reason',
+        type: 'choice',
+        question: 'What was your main reason for signing up?',
+        options: [
+            'To explore AI agents for my website',
+            'Lead generation',
+            'Customer support automation',
+            'Product curiosity / learning',
+            'Just testing it out'
+        ]
+    },
+    {
+        id: 'requirements',
+        type: 'long_text', // NEW
+        question: 'Any specific requirements or integrations you need?',
+        placeholder: 'e.g. I need HubSpot integration and specific custom styling...'
+    },
+    {
+        id: 'role',
+        type: 'choice',
+        question: 'What best describes you?',
+        options: [
+            'Founder / Co-founder',
+            'Developer',
+            'Product Manager',
+            'Student',
+            'Other'
+        ]
+    },
+    {
+        id: 'value',
+        type: 'choice',
+        question: 'What would make WebRep more valuable for you?',
+        options: [
+            'Better UI/UX',
+            'More AI customization',
+            'Analytics & insights',
+            'Faster setup',
+            'Pricing clarity'
+        ]
+    }
+];
+
+export default function OnboardingFlowPage() {
     const router = useRouter();
-    const [step, setStep] = useState(1);
-    const [url, setUrl] = useState('');
-    const [persona, setPersona] = useState<string | null>(null);
+    const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
 
-    // Step 1: Welcome & URL
-    const handleUrlSubmit = async () => {
-        if (!url) return;
-        setLoading(true);
-        // Simulate ingest process
-        await new Promise(r => setTimeout(r, 2000));
-        setLoading(false);
-        setStep(2);
+    // Store answers by question ID
+    const [answers, setAnswers] = useState<Record<string, string>>({});
+
+    // Direction for animation (1 for forward, -1 for backward)
+    const [direction, setDirection] = useState(0);
+
+    const currentQuestion = ONBOARDING_QUESTIONS[currentStep];
+    const totalSteps = ONBOARDING_QUESTIONS.length;
+
+    // Safety check
+    if (!currentQuestion) return null;
+
+    const handleAnswer = async (value: string) => {
+        const newAnswers = { ...answers, [currentQuestion.id]: value };
+        setAnswers(newAnswers);
+
+        // For text inputs, we don't auto-advance in the render, 
+        // the user clicks "Next". But for choices, we auto-advance.
+        if (currentQuestion.type === 'choice') {
+            if (currentStep < totalSteps - 1) {
+                setTimeout(() => {
+                    setDirection(1);
+                    setCurrentStep(prev => prev + 1);
+                }, 250);
+            } else {
+                setLoading(true);
+                await submitAll(newAnswers);
+            }
+        }
     };
 
-    // Step 2: Persona
-    const handlePersonaSelect = (p: string) => {
-        setPersona(p);
+    const handleNext = async () => {
+        if (!answers[currentQuestion.id]) return; // Prevent empty next
+
+        if (currentStep < totalSteps - 1) {
+            setDirection(1);
+            setCurrentStep(prev => prev + 1);
+        } else {
+            setLoading(true);
+            await submitAll(answers);
+        }
     };
 
-    const handlePersonaSubmit = async () => {
-        if (!persona) return;
-        setLoading(true);
-        // Create agent with context (Simulated)
-        // await createAgent({ name: 'My Agent', url, role: persona });
-        await new Promise(r => setTimeout(r, 1500));
-        setLoading(false);
-        setStep(3);
+    const handleBack = () => {
+        if (currentStep > 0) {
+            setDirection(-1);
+            setCurrentStep(prev => prev - 1);
+        }
     };
 
-    // Step 3: Completion
-    const handleFinish = () => {
-        router.push('/dashboard');
+    const submitAll = async (finalAnswers: Record<string, string>) => {
+        try {
+            const payload = {
+                domain_occupation: finalAnswers['role'] || 'Other',
+                project_idea: finalAnswers['reason'] || 'Exploring',
+                referral_source: finalAnswers['referral'] || '',
+                onboarding_answers: Object.entries(finalAnswers).map(([key, value]) => ({
+                    question_id: key,
+                    answer: value
+                }))
+            };
+
+            await saveOnboardingData(payload);
+            router.push('/agent-setup');
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to save your preferences. Please try again.");
+            setLoading(false);
+        }
+    };
+
+    const variants = {
+        enter: (direction: number) => ({
+            x: direction > 0 ? 30 : -30,
+            opacity: 0,
+            scale: 0.98
+        }),
+        center: {
+            zIndex: 1,
+            x: 0,
+            opacity: 1,
+            scale: 1
+        },
+        exit: (direction: number) => ({
+            zIndex: 0,
+            x: direction < 0 ? 30 : -30,
+            opacity: 0,
+            scale: 0.98
+        })
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4">
-            {/* Logo */}
-            <div className="mb-8 font-bold text-2xl flex items-center gap-2">
-                <div className="w-0 h-0 border-l-[10px] border-l-transparent border-b-[16px] border-b-blue-600 border-r-[10px] border-r-transparent mb-1"></div>
-                WEBREP
-            </div>
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 overflow-hidden relative">
+            {/* Background Effects */}
+            <div className="absolute top-0 left-0 right-0 h-[500px] bg-gradient-to-b from-blue-500/5 to-transparent pointer-events-none" />
+            <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute top-[20%] left-[-10%] w-[400px] h-[400px] bg-violet-600/5 rounded-full blur-[100px] pointer-events-none" />
 
-            <div className="w-full max-w-2xl">
-                {/* Progress Steps */}
-                <div className="flex items-center justify-center mb-12 gap-4">
-                    {[1, 2, 3].map(s => (
-                        <div key={s} className="flex items-center gap-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${step >= s ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                {step > s ? <CheckCircle2 className="w-5 h-5" /> : s}
-                            </div>
-                            {s < 3 && <div className={`w-12 h-1 rounded-full ${step > s ? 'bg-blue-600' : 'bg-slate-200'}`} />}
-                        </div>
-                    ))}
+            {/* Header / Logo */}
+            <div className="mb-12 flex flex-col items-center z-10 space-y-4">
+                <div className="font-bold text-xl flex items-center gap-2 tracking-tight">
+                    <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">W</div>
+                    WebRep
                 </div>
-
-                <AnimatePresence mode="wait">
-                    {/* STEP 1: Website URL */}
-                    {step === 1 && (
-                        <motion.div
-                            key="step1"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                        >
-                            <Card className="border-0 shadow-xl">
-                                <CardHeader className="text-center">
-                                    <CardTitle className="text-2xl">Let's train your AI Agent</CardTitle>
-                                    <CardDescription>Enter your website URL. We'll analyze your content to build your custom knowledge base.</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex gap-4">
-                                        <Input
-                                            placeholder="https://example.com"
-                                            className="h-12 text-lg"
-                                            value={url}
-                                            onChange={e => setUrl(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-sm text-blue-700 dark:text-blue-300">
-                                        <p>💡 Tip: For best results, use your home page. We'll crawl linked pages automatically.</p>
-                                    </div>
-                                </CardContent>
-                                <CardFooter className="flex justify-end">
-                                    <Button size="lg" onClick={handleUrlSubmit} disabled={loading || !url}>
-                                        {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-                                        Analyze Website
-                                    </Button>
-                                </CardFooter>
-                            </Card>
-                        </motion.div>
-                    )}
-
-                    {/* STEP 2: Persona */}
-                    {step === 2 && (
-                        <motion.div
-                            key="step2"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                        >
-                            <Card className="border-0 shadow-xl">
-                                <CardHeader className="text-center">
-                                    <CardTitle className="text-2xl">Choose your Agent's Persona</CardTitle>
-                                    <CardDescription>How should your AI representative interact with visitors?</CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div
-                                        onClick={() => handlePersonaSelect('support')}
-                                        className={`cursor-pointer border-2 rounded-xl p-6 hover:border-blue-500 transition-all ${persona === 'support' ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-100 dark:border-slate-800'}`}
-                                    >
-                                        <div className="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-4">
-                                            <MessageSquare className="w-6 h-6" />
-                                        </div>
-                                        <h3 className="font-bold text-lg mb-2">Support Hero</h3>
-                                        <p className="text-slate-500 text-sm">Focuses on answering FAQs, troubleshooting, and providing helpful information.</p>
-                                    </div>
-
-                                    <div
-                                        onClick={() => handlePersonaSelect('sales')}
-                                        className={`cursor-pointer border-2 rounded-xl p-6 hover:border-blue-500 transition-all ${persona === 'sales' ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-100 dark:border-slate-800'}`}
-                                    >
-                                        <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-4">
-                                            <Layout className="w-6 h-6" />
-                                        </div>
-                                        <h3 className="font-bold text-lg mb-2">Sales Expert</h3>
-                                        <p className="text-slate-500 text-sm">Focuses on value proposition, handling objections, and driving conversions.</p>
-                                    </div>
-                                </CardContent>
-                                <CardFooter className="flex justify-between">
-                                    <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
-                                    <Button size="lg" onClick={handlePersonaSubmit} disabled={loading || !persona}>
-                                        {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-                                        Create Agent
-                                    </Button>
-                                </CardFooter>
-                            </Card>
-                        </motion.div>
-                    )}
-
-                    {/* STEP 3: Success */}
-                    {step === 3 && (
-                        <motion.div
-                            key="step3"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                        >
-                            <Card className="border-0 shadow-xl text-center p-8">
-                                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <CheckCircle2 className="w-10 h-10 text-green-600" />
-                                </div>
-                                <h2 className="text-3xl font-bold mb-4">Your Agent is Ready!</h2>
-                                <p className="text-slate-500 mb-8 max-w-md mx-auto">
-                                    We've created your agent based on <strong>{url}</strong> with a <strong>{persona}</strong> persona.
-                                </p>
-
-                                <div className="bg-slate-900 text-slate-300 p-4 rounded-lg text-left text-sm font-mono mb-8 overflow-x-auto">
-                                    <code>{`<script src="https://webrep.ai/embed.js" data-agent-id="AGENT_123"></script>`}</code>
-                                </div>
-
-                                <Button size="lg" className="w-full" onClick={handleFinish}>
-                                    Go to Dashboard
-                                    <ArrowRight className="w-5 h-5 ml-2" />
-                                </Button>
-                            </Card>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                <div className="flex items-center gap-3 text-sm font-medium">
+                    <div className="h-1 w-24 bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${((currentStep) / totalSteps) * 100}%` }} />
+                    </div>
+                    <span className="text-muted-foreground">Step {currentStep + 1} of {totalSteps}</span>
+                </div>
             </div>
+
+            {/* Main Card */}
+            <div className="w-full max-w-lg relative z-10 perspective-1000">
+                <AnimatePresence mode="wait" custom={direction}>
+                    <motion.div
+                        key={currentStep}
+                        custom={direction}
+                        variants={variants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{
+                            x: { type: "spring", stiffness: 400, damping: 40 },
+                            opacity: { duration: 0.2 }
+                        }}
+                        className="w-full"
+                    >
+                        <div className="w-full">
+                            <h2 className="text-3xl font-bold text-center mb-8 text-foreground tracking-tight leading-tight">
+                                {currentQuestion.question}
+                            </h2>
+
+                            <div className="space-y-4">
+                                {currentQuestion.type === 'choice' && currentQuestion.options?.map((option, idx) => {
+                                    const isSelected = answers[currentQuestion.id] === option;
+                                    return (
+                                        <motion.button
+                                            key={option}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            onClick={() => !loading && handleAnswer(option)}
+                                            disabled={loading}
+                                            whileHover={{ scale: 1.01, backgroundColor: "rgba(59, 130, 246, 0.05)" }}
+                                            whileTap={{ scale: 0.99 }}
+                                            className={cn(
+                                                "w-full p-5 rounded-xl text-left text-base font-medium transition-all duration-200 flex items-center justify-between group border",
+                                                isSelected
+                                                    ? "border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 ring-1 ring-blue-600 shadow-sm"
+                                                    : "border-border bg-card text-foreground hover:border-blue-300 dark:hover:border-blue-700 shadow-sm hover:shadow-md"
+                                            )}
+                                        >
+                                            <span>{option}</span>
+                                            <div className={cn(
+                                                "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                                                isSelected
+                                                    ? "border-blue-600 bg-blue-600"
+                                                    : "border-muted-foreground/30 group-hover:border-blue-400"
+                                            )}>
+                                                {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
+                                            </div>
+                                        </motion.button>
+                                    );
+                                })}
+
+                                {(currentQuestion.type === 'text' || currentQuestion.type === 'long_text') && (
+                                    <div className="space-y-4">
+                                        {currentQuestion.type === 'text' ? (
+                                            <Input
+                                                autoFocus
+                                                placeholder={currentQuestion.placeholder}
+                                                className="h-14 text-lg bg-card"
+                                                value={answers[currentQuestion.id] || ''}
+                                                onChange={(e) => setAnswers({ ...answers, [currentQuestion.id]: e.target.value })}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && answers[currentQuestion.id]) {
+                                                        handleNext();
+                                                    }
+                                                }}
+                                            />
+                                        ) : (
+                                            <Textarea
+                                                autoFocus
+                                                placeholder={currentQuestion.placeholder}
+                                                className="min-h-[120px] text-lg bg-card p-4"
+                                                value={answers[currentQuestion.id] || ''}
+                                                onChange={(e) => setAnswers({ ...answers, [currentQuestion.id]: e.target.value })}
+                                            />
+                                        )}
+
+                                        <Button
+                                            size="lg"
+                                            className="w-full h-12 text-base"
+                                            onClick={handleNext}
+                                            disabled={!answers[currentQuestion.id] || loading}
+                                        >
+                                            {currentStep === totalSteps - 1 ? 'Finish' : 'Next'} <ArrowRight className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+                </AnimatePresence>
+
+                {/* Navigation */}
+                <div className="mt-8 flex items-center justify-start px-1">
+                    <Button
+                        variant="ghost"
+                        onClick={handleBack}
+                        disabled={currentStep === 0 || loading}
+                        className={cn("text-muted-foreground hover:text-foreground pl-0 hover:bg-transparent", currentStep === 0 && "opacity-0 pointer-events-none")}
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Back
+                    </Button>
+                </div>
+            </div>
+
+            {loading && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                    <p className="text-lg font-medium text-foreground animate-pulse">Setting up your profile...</p>
+                </div>
+            )}
         </div>
     );
 }

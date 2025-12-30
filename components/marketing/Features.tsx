@@ -1,162 +1,205 @@
 "use client";
 
 import {
-    Brain,
-    Zap,
-    Compass,
-    MousePointerClick,
-    MessageCircleQuestion,
-    Fingerprint,
-    Code,
-    BarChart3,
-    Infinity
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+  Brain,
+  Zap,
+  Compass,
+  MousePointerClick,
+  MessageCircleQuestion,
+  Fingerprint,
+  Code,
+  BarChart3,
+  Infinity,
+  Sparkles,
+} from "lucide-react";
+import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
+import { MouseEvent } from "react";
+
+interface Feature {
+  icon: JSX.Element;
+  title: string;
+  description: string;
+  tagline: string;
+  color: string;
+  className: string;
+}
+
+function FeatureCard({
+  feature,
+  className,
+}: {
+  feature: Feature;
+  className?: string;
+}) {
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  function handleMouseMove({ currentTarget, clientX, clientY }: MouseEvent) {
+    const { left, top } = currentTarget.getBoundingClientRect();
+    mouseX.set(clientX - left);
+    mouseY.set(clientY - top);
+  }
+
+  return (
+    <motion.div
+      className={`group relative border border-border bg-card overflow-hidden rounded-3xl p-8 ${className}`}
+      onMouseMove={handleMouseMove}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5 }}
+    >
+      <motion.div
+        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
+        style={{
+          background: useMotionTemplate`
+                        radial-gradient(
+                          650px circle at ${mouseX}px ${mouseY}px,
+                          rgba(59, 130, 246, 0.1),
+                          transparent 80%
+                        )
+                      `,
+        }}
+      />
+      <div className="relative z-10 h-full flex flex-col">
+        <div
+          className={`w-12 h-12 rounded-2xl ${feature.color} flex items-center justify-center mb-6 shadow-inner`}
+        >
+          <div className="text-white">{feature.icon}</div>
+        </div>
+
+        <h3 className="text-xl font-bold text-foreground mb-3 leading-tight tracking-tight">
+          {feature.title}
+        </h3>
+
+        <p className="text-muted-foreground leading-relaxed flex-grow">
+          {feature.description}
+        </p>
+
+        <div className="mt-6 pt-6 border-t border-border/50 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors">
+          <Sparkles className="w-4 h-4" />
+          {feature.tagline}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export function Features() {
-    const features = [
-        {
-            icon: <Brain className="w-6 h-6" />,
-            title: 'Learns Your Entire Website Automatically',
-            description: 'WebRep reads and interprets your website content including service pages, product descriptions, pricing, FAQs, blogs, and support information.',
-            tagline: 'Precision through context',
-            color: 'bg-blue-500',
-        },
-        {
-            icon: <Zap className="w-6 h-6" />,
-            title: 'Responds Instantly With High-Quality Information',
-            description: 'Eliminates lag and uncertainty by providing clear, accurate responses the moment visitors ask questions. It understands intent and delivers actionable explanations.',
-            tagline: 'Zero latency trust',
-            color: 'bg-amber-500',
-        },
-        {
-            icon: <Compass className="w-6 h-6" />,
-            title: 'Guides Visitors Through Your Website With Purpose',
-            description: 'Instead of leaving visitors to navigate alone, WebRep directs them toward the most relevant pages or actions based on their interests.',
-            tagline: 'Personalized navigation',
-            color: 'bg-emerald-500',
-        },
-        {
-            icon: <MousePointerClick className="w-6 h-6" />,
-            title: 'Converts Conversations Into Actions',
-            description: 'More than a chatbot, WebRep is engineered to drive decisions. It can book consultations, collect leads, surface pricing, and route visitors.',
-            tagline: 'Active sales engine',
-            color: 'bg-purple-500',
-        },
-        {
-            icon: <MessageCircleQuestion className="w-6 h-6" />,
-            title: 'Handles Objections and Clarifies Complex Topics',
-            description: 'Explains pricing, justifies value, differentiates your offerings, and resolves common objections in real time with clarity and confidence.',
-            tagline: 'Overcome hesitation',
-            color: 'bg-rose-500',
-        },
-        {
-            icon: <Fingerprint className="w-6 h-6" />,
-            title: 'Maintains Your Brand Voice and Standards',
-            description: 'Mirrors your brand’s tone—whether professional, friendly, or authoritative. It follows your communication guidelines perfectly.',
-            tagline: 'Consistent identity',
-            color: 'bg-indigo-500',
-        },
-        {
-            icon: <Code className="w-6 h-6" />,
-            title: 'Deploys Instantly With One Script',
-            description: 'Activated on any website by placing a lightweight script. Supports WordPress, Webflow, Shopify, Squarespace, and custom builds.',
-            tagline: 'No-code integration',
-            color: 'bg-slate-500',
-        },
-        {
-            icon: <BarChart3 className="w-6 h-6" />,
-            title: 'Delivers Actionable Visitor Insights',
-            description: 'Collects and analyzes real visitor questions, confusion points, and high-intent signals to help you refine messaging and optimize scale.',
-            tagline: 'Data-driven growth',
-            color: 'bg-cyan-500',
-        },
-        {
-            icon: <Infinity className="w-6 h-6" />,
-            title: 'Operates Continuously and at Scale',
-            description: 'Provides consistent, reliable interactions 24/7, handling unlimited visitor inquiries simultaneously with no drop in quality.',
-            tagline: 'Always-on performance',
-            color: 'bg-pink-500',
-        },
-    ];
+  const features: Feature[] = [
+    {
+      icon: <Brain className="w-6 h-6" />,
+      title: "Semantic Context Engine",
+      description:
+        "Analyzes your entire site to understand product details, pricing, and brand voice with near-human comprehension.",
+      tagline: "Deep Learning",
+      color: "bg-blue-600",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <Zap className="w-6 h-6" />,
+      title: "40ms Response Time",
+      description:
+        "Lightning-fast answers that keep users engaged and prevent bounce rates.",
+      tagline: "Real-time",
+      color: "bg-amber-500",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <Compass className="w-6 h-6" />,
+      title: "Smart Navigation",
+      description:
+        "Directs users to specific pages based on their intent, increasing page-per-visit metrics.",
+      tagline: "Contextual Routing",
+      color: "bg-emerald-500",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <MousePointerClick className="w-6 h-6" />,
+      title: "Conversion Actions",
+      description:
+        "Can book meetings, collect emails, or process basic orders directly inside the chat interface.",
+      tagline: "Revenue Driver",
+      color: "bg-purple-600",
+      className: "md:col-span-2 lg:col-span-2",
+    },
+    {
+      icon: <MessageCircleQuestion className="w-6 h-6" />,
+      title: "Objection Handling",
+      description:
+        "Justifies value, differentiates offerings, and resolves hesitation confidently in real-time.",
+      tagline: "Closing Logic",
+      color: "bg-rose-500",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <Fingerprint className="w-6 h-6" />,
+      title: "Brand Tone Matching",
+      description:
+        "Learns your specific writing style to ensure every interaction feels like your team.",
+      tagline: "Brand Safe",
+      color: "bg-indigo-500",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <Code className="w-6 h-6" />,
+      title: "1-Click Deployment",
+      description:
+        "Works with any platform. Just paste one line of code and you are live.",
+      tagline: "Universal",
+      color: "bg-slate-500",
+      className: "md:col-span-2 lg:col-span-2",
+    },
+    {
+      icon: <BarChart3 className="w-6 h-6" />,
+      title: "Conversational Analytics",
+      description:
+        "Uncover what your visitors are actually asking and identify gaps in your content.",
+      tagline: "Actionable Data",
+      color: "bg-cyan-500",
+      className: "md:col-span-1 lg:col-span-1",
+    },
+    {
+      icon: <Infinity className="w-6 h-6" />,
+      title: "Infinite Scale",
+      description:
+        "Handles thousands of simultaneous visitors without any degradation in quality.",
+      tagline: "Always On",
+      color: "bg-pink-500",
+      className: "md:col-span-2 lg:col-span-3",
+    },
+  ];
 
-    const container = {
-        hidden: { opacity: 0 },
-        show: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    };
+  return (
+    <section className="py-32 bg-background relative overflow-hidden">
+      <div className="container mx-auto px-4 z-10 relative">
+        <div className="text-center max-w-3xl mx-auto mb-20">
+          <h2 className="text-sm font-semibold text-primary tracking-widest uppercase mb-4">
+            Capabilities
+          </h2>
+          <h3 className="text-4xl md:text-5xl font-bold text-foreground mb-6 tracking-tight">
+            More Than Just a Chatbot. <br />A Complete{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">
+              Revenue Engine
+            </span>
+            .
+          </h3>
+          <p className="text-xl text-muted-foreground">
+            WebRep doesn&apos;t just answer questions. It understands intent,
+            handles objections, and closes deals 24/7.
+          </p>
+        </div>
 
-    const item = {
-        hidden: { opacity: 0, y: 20 },
-        show: { opacity: 1, y: 0, transition: { duration: 0.5 } }
-    };
-
-    return (
-        <section className="py-24 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-            <div className="container mx-auto px-4">
-                <div className="text-center max-w-3xl mx-auto mb-20">
-                    <motion.h2
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5 }}
-                        className="text-3xl md:text-5xl font-bold text-slate-900 dark:text-white mb-6 leading-tight"
-                    >
-                        A Modern AI Website Representative Built to <span className="text-blue-600 dark:text-blue-400">Clarify</span>, <span className="text-purple-600 dark:text-purple-400">Guide</span>, and <span className="text-pink-600 dark:text-pink-400">Convert</span>
-                    </motion.h2>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5, delay: 0.2 }}
-                        className="text-lg md:text-xl text-slate-600 dark:text-slate-300"
-                    >
-                        WebRep isn't just support software. It's an autonomous agent that learns your business and actively drives revenue.
-                    </motion.p>
-                </div>
-
-                <motion.div
-                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-                    variants={container}
-                    initial="hidden"
-                    whileInView="show"
-                    viewport={{ once: true, margin: "-100px" }}
-                >
-                    {features.map((feature, idx) => (
-                        <motion.div
-                            key={idx}
-                            variants={item}
-                            className="group p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 relative overflow-hidden"
-                        >
-                            <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity`}>
-                                <div className={`w-24 h-24 rounded-full blur-2xl ${feature.color}`} />
-                            </div>
-
-                            <div
-                                className={`w-12 h-12 rounded-lg ${feature.color} text-white flex items-center justify-center mb-6 shadow-lg transform group-hover:scale-110 transition-transform relative z-10`}
-                            >
-                                {feature.icon}
-                            </div>
-
-                            <div className="relative z-10">
-                                <span className={`text-xs font-bold uppercase tracking-wider mb-2 block ${feature.color.replace('bg-', 'text-')}`}>
-                                    {feature.tagline}
-                                </span>
-                                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                    {feature.title}
-                                </h3>
-                                <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm">
-                                    {feature.description}
-                                </p>
-                            </div>
-                        </motion.div>
-                    ))}
-                </motion.div>
-            </div>
-        </section>
-    );
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {features.map((feature, idx) => (
+            <FeatureCard
+              key={idx}
+              feature={feature}
+              className={feature.className}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }

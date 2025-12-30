@@ -624,12 +624,17 @@ async function chatGetHandler(request: NextRequest) {
         throw new ValidationError("Access denied");
       }
 
+      // ✅ FIX: Type assertion to help TypeScript understand the type
+      // The agent exists at this point, but TypeScript's control flow analysis
+      // is having trouble with the RLS query pattern
+      const agentData = agent as { id: string; status: string };
+
       // Additional check: Verify agent is active
-      if (agent.status !== "active") {
+      if (agentData.status !== "active") {
         logger.warn("Access denied: Agent is not active", {
           userId: user.id,
           agentId: conversation.agent_id,
-          status: agent.status,
+          status: agentData.status,
         });
         throw new ValidationError("This agent is not active");
       }
