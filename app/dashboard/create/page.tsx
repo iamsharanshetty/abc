@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowRight, Bot, Check, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { validateUrl } from "@/lib/validation";
 import { AGENT_ROLES, AgentRole, SUGGESTED_FUNCTIONS } from "@/types/agent";
 import { logger } from "@/lib/utils/logger";
+import { createAgent } from "@/lib/actions/agents";
 
 const PROGRESS_STEPS = [
   "Scraping website content...",
@@ -30,6 +31,7 @@ const PROGRESS_STEPS = [
 
 function CreateAgentPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlFromParam = searchParams.get("url");
 
   const [step, setStep] = React.useState<"input" | "generating" | "settings">(
@@ -44,12 +46,12 @@ function CreateAgentPageContent() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<any>(null);
   const [currentJobId, setCurrentJobId] = React.useState<string | null>(null);
+  const [isSavingAgent, setIsSavingAgent] = React.useState(false);
   const pollingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Auto-start if URL is provided
   React.useEffect(() => {
     if (urlFromParam && !isLoading && step === "input") {
-      // Small delay to show the UI first
       setTimeout(() => {
         handleStart();
       }, 500);
@@ -97,7 +99,6 @@ function CreateAgentPageContent() {
         if (result.success) {
           const { status, progress, result: jobResult } = result.data;
 
-          // Update progress indicator based on job progress
           if (progress !== undefined) {
             const stepIndex = Math.floor(
               (progress / 100) * PROGRESS_STEPS.length
@@ -189,17 +190,13 @@ function CreateAgentPageContent() {
     try {
       logger.info("Starting website analysis", { url });
 
-      // Move to generating step BEFORE API call
       setStep("generating");
       setProgressIndex(0);
 
-      // ✅ ONLY call the V2 API - NOT /api/analyze
       logger.debug("Calling ingestion API", { endpoint: "/api/v2/ingest" });
       const response = await fetch("/api/v2/ingest", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: url,
           useBrowser: true,
@@ -228,12 +225,10 @@ function CreateAgentPageContent() {
         );
       }
 
-      // Start polling for job status
       const jobId = result.data.jobId;
       logger.info("Background job created", { jobId, url });
       setCurrentJobId(jobId);
 
-      // Start polling
       await pollJobStatus(jobId);
     } catch (err) {
       logger.error("Website analysis failed", {
@@ -274,17 +269,60 @@ function CreateAgentPageContent() {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     } finally {
-      // Stop polling
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
 
-      // Reset state
       setIsLoading(false);
       setStep("input");
       setProgressIndex(0);
       setCurrentJobId(null);
+    }
+  };
+
+  /**
+   * ✅ NEW: Save agent to database after successful analysis
+   */
+  const handleConfigureAgent = async () => {
+    setIsSavingAgent(true);
+    setError("");
+
+    try {
+      logger.info("Creating agent record", { url, role: selectedRole });
+
+      // Generate agent name from URL
+      const hostname = new URL(url).hostname.replace("www.", "");
+      const agentName = `${hostname} ${
+        AGENT_ROLES.find((r) => r.id === selectedRole)?.label || "Agent"
+      }`;
+
+      // Create agent in database
+      const result = await createAgent({
+        name: agentName,
+        websiteUrl: url,
+        role: selectedRole,
+        settings: {
+          summary: `AI agent for ${hostname} - ${
+            AGENT_ROLES.find((r) => r.id === selectedRole)?.description || ""
+          }`,
+        },
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create agent");
+      }
+
+      logger.info("Agent created successfully", { agentId: result.agentId });
+
+      // Redirect to dashboard
+      router.push("/dashboard");
+    } catch (err) {
+      logger.error("Failed to create agent", { error: err });
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to create agent";
+      setError(errorMessage);
+      setIsSavingAgent(false);
     }
   };
 
@@ -455,7 +493,6 @@ function CreateAgentPageContent() {
                 ))}
               </div>
 
-              {/* Cancel Button */}
               <div className="flex justify-center pt-4">
                 <Button
                   variant="outline"
@@ -560,6 +597,13 @@ function CreateAgentPageContent() {
                 </CardContent>
               </Card>
 
+              {error && (
+                <div className="flex items-center text-sm text-red-500 p-3 bg-red-50 dark:bg-red-950/20 rounded-md">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  {error}
+                </div>
+              )}
+
               <div className="flex justify-end space-x-4">
                 <Button
                   variant="outline"
@@ -570,11 +614,16 @@ function CreateAgentPageContent() {
                     setProgressIndex(0);
                     setCurrentJobId(null);
                   }}
+                  disabled={isSavingAgent}
                 >
                   Create Another
                 </Button>
-                <Button>
-                  Configure Agent
+                <Button
+                  onClick={handleConfigureAgent}
+                  disabled={isSavingAgent}
+                  isLoading={isSavingAgent}
+                >
+                  {isSavingAgent ? "Saving..." : "Save Agent"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>

@@ -3,7 +3,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { config } from "@/lib/config";
+import { config } from "@/lib/config"; // ✅ Client-safe config (for settings)
+import { serverConfig } from "@/lib/config.server"; // ✅ ADDED: Server config (for API key)
 import { logger } from "@/lib/utils/logger";
 import { AgentContext } from "./aiAgent";
 
@@ -15,8 +16,8 @@ export class LangChainService {
   private apiKey: string;
 
   constructor() {
-    // ✅ Just store the API key, don't create model yet
-    this.apiKey = config.openai.apiKey;
+    // ✅ FIXED: Get API key from serverConfig instead of config
+    this.apiKey = serverConfig.openai.apiKey;
   }
 
   /**
@@ -30,7 +31,7 @@ export class LangChainService {
       modelName: "gpt-4o-mini",
       temperature: settings?.temperature ?? 0.7, // Use setting or default
       maxTokens: settings?.maxTokens ?? 500, // Use setting or default
-      openAIApiKey: this.apiKey,
+      openAIApiKey: this.apiKey, // ✅ Uses the API key from serverConfig
     });
   }
 

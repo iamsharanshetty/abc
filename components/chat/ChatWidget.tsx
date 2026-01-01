@@ -1,15 +1,20 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
 import { useState, useRef, useEffect } from "react";
 import { Send, X, MessageCircle, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatWidgetProps {
-  agentId?: string;
+  agentId: string;
   websiteUrl?: string;
   primaryColor?: string;
   title?: string;
+}
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
 }
 
 export function ChatWidget({
@@ -20,20 +25,15 @@ export function ChatWidget({
 }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-
-  // AI SDK v4 useChat - simplified configuration
-  const { messages, isLoading, error, append, reload } = useChat({
-    api: "/api/v2/chat",
-    body: {
-      agentId,
-      websiteUrl,
-    },
-    onError: (err: Error) => {
-      console.error("Chat error:", err);
-    },
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string>(
+    () => `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,12 +45,149 @@ export function ChatWidget({
     }
   }, [messages, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Load conversation history when widget opens
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && conversationId) {
+      loadConversationHistory();
+    }
+  }, [isOpen]);
+
+  const loadConversationHistory = async () => {
+    try {
+      const response = await fetch(
+        `/api/v2/chat?conversationId=${conversationId}`
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data.messages.length > 0) {
+          const formattedMessages: Message[] = result.data.messages.map(
+            (msg: any, idx: number) => ({
+              id: `${conversationId}_${idx}`,
+              role: msg.role,
+              content: msg.content,
+            })
+          );
+          setMessages(formattedMessages);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load conversation history:", err);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    append({ role: "user", content: input });
+    const userMessage = input.trim();
+    const userMessageId = `${conversationId}_${Date.now()}`;
+
+    // Add user message
+    setMessages((prev) => [
+      ...prev,
+      { id: userMessageId, role: "user", content: userMessage },
+    ]);
     setInput("");
+    setIsLoading(true);
+    setError(null);
+
+    // Create abort controller
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const response = await fetch("/api/v2/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          message: userMessage,
+          conversationId,
+          stream: true,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const decoder = new TextDecoder();
+      let assistantMessage = "";
+      const assistantMessageId = `${conversationId}_${Date.now()}_assistant`;
+
+      // Add empty assistant message
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMessageId, role: "assistant", content: "" },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "token") {
+                assistantMessage += data.token;
+                // Update assistant message
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: assistantMessage }
+                      : msg
+                  )
+                );
+              } else if (data.type === "done") {
+                // Final message
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: data.fullResponse }
+                      : msg
+                  )
+                );
+              } else if (data.type === "error") {
+                throw new Error(data.error || "An error occurred");
+              }
+            } catch (parseError) {
+              // Skip invalid JSON lines
+              console.warn("Failed to parse SSE line:", line);
+            }
+          }
+        }
+      }
+
+      setIsLoading(false);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Request was aborted");
+      } else {
+        console.error("Chat error:", err);
+        setError(err.message || "Failed to send message. Please try again.");
+        // Remove the empty assistant message on error
+        setMessages((prev) => prev.filter((msg) => msg.content !== ""));
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsLoading(false);
+    }
   };
 
   const bgPrimary = { backgroundColor: primaryColor };
@@ -124,7 +261,7 @@ export function ChatWidget({
                 )}
                 style={m.role === "user" ? bgPrimary : {}}
               >
-                {m.content}
+                {m.content || <span className="opacity-50">...</span>}
               </div>
             </div>
           ))}
@@ -140,14 +277,8 @@ export function ChatWidget({
           )}
 
           {error && (
-            <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2">
-              <span>Something went wrong. Please try again.</span>
-              <button
-                onClick={() => reload()}
-                className="underline hover:text-red-600"
-              >
-                Retry
-              </button>
+            <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2 p-2 bg-red-50 dark:bg-red-950/20 rounded">
+              <span>{error}</span>
             </div>
           )}
 
@@ -165,12 +296,17 @@ export function ChatWidget({
               disabled={isLoading}
             />
             <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
+              type={isLoading ? "button" : "submit"}
+              onClick={isLoading ? handleStop : undefined}
+              disabled={!isLoading && !input.trim()}
               className="p-3 rounded-full text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all transform active:scale-95"
               style={bgPrimary}
             >
-              <Send className="w-4 h-4 ml-0.5" />
+              {isLoading ? (
+                <X className="w-4 h-4" />
+              ) : (
+                <Send className="w-4 h-4 ml-0.5" />
+              )}
             </button>
           </form>
         </div>
