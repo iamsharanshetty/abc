@@ -3,7 +3,15 @@
 import * as React from "react";
 import { Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowRight, Bot, Check, Loader2, AlertCircle } from "lucide-react";
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  Loader2,
+  AlertCircle,
+  Copy,
+  CheckCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -34,9 +42,9 @@ function CreateAgentPageContent() {
   const router = useRouter();
   const urlFromParam = searchParams.get("url");
 
-  const [step, setStep] = React.useState<"input" | "generating" | "settings">(
-    "input"
-  );
+  const [step, setStep] = React.useState<
+    "input" | "generating" | "settings" | "complete"
+  >("input");
   const [url, setUrl] = React.useState(urlFromParam || "");
   const [selectedRole, setSelectedRole] = React.useState<AgentRole>(
     AGENT_ROLES[0].id
@@ -47,6 +55,10 @@ function CreateAgentPageContent() {
   const [analysisResult, setAnalysisResult] = React.useState<any>(null);
   const [currentJobId, setCurrentJobId] = React.useState<string | null>(null);
   const [isSavingAgent, setIsSavingAgent] = React.useState(false);
+  const [generatedAgentId, setGeneratedAgentId] = React.useState<string | null>(
+    null
+  );
+  const [copied, setCopied] = React.useState(false);
   const pollingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Auto-start if URL is provided
@@ -282,7 +294,7 @@ function CreateAgentPageContent() {
   };
 
   /**
-   * ✅ NEW: Save agent to database after successful analysis
+   * Save agent to database after successful analysis
    */
   const handleConfigureAgent = async () => {
     setIsSavingAgent(true);
@@ -313,16 +325,43 @@ function CreateAgentPageContent() {
         throw new Error(result.error || "Failed to create agent");
       }
 
+      if (!result.agentId) {
+        throw new Error("Agent created but no ID was returned");
+      }
+
       logger.info("Agent created successfully", { agentId: result.agentId });
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Store the agent ID and move to complete step
+      setGeneratedAgentId(result.agentId);
+      setIsSavingAgent(false);
+      setStep("complete");
     } catch (err) {
       logger.error("Failed to create agent", { error: err });
       const errorMessage =
         err instanceof Error ? err.message : "Failed to create agent";
       setError(errorMessage);
       setIsSavingAgent(false);
+    }
+  };
+
+  /**
+   * Copy embed code to clipboard
+   */
+  const handleCopyEmbedCode = async () => {
+    if (!generatedAgentId) return;
+
+    const embedCode = `<script 
+  src="${window.location.origin}/embed.js" 
+  data-agent-id="${generatedAgentId}"
+  data-primary-color="#2563eb"
+></script>`;
+
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
   };
 
@@ -439,7 +478,7 @@ function CreateAgentPageContent() {
         </div>
       </div>
 
-      {/* Right Panel (Progress / Settings) */}
+      {/* Right Panel (Progress / Settings / Complete) */}
       <div
         className={cn(
           "flex-1 p-6 transition-all duration-500 ease-in-out overflow-y-auto",
@@ -447,6 +486,7 @@ function CreateAgentPageContent() {
         )}
       >
         <div className="h-full flex flex-col justify-center max-w-2xl mx-auto">
+          {/* GENERATING STEP */}
           {step === "generating" && (
             <div className="space-y-8">
               <div className="space-y-2">
@@ -505,11 +545,12 @@ function CreateAgentPageContent() {
             </div>
           )}
 
+          {/* SETTINGS STEP */}
           {step === "settings" && analysisResult && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold">Agent Created!</h2>
+                  <h2 className="text-2xl font-semibold">Analysis Complete!</h2>
                   <p className="text-muted-foreground">
                     Analyzed{" "}
                     {analysisResult.pagesProcessed ||
@@ -624,6 +665,105 @@ function CreateAgentPageContent() {
                   isLoading={isSavingAgent}
                 >
                   {isSavingAgent ? "Saving..." : "Save Agent"}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* COMPLETE STEP - SHOW EMBED CODE */}
+          {step === "complete" && generatedAgentId && (
+            <div className="space-y-6">
+              <div className="text-center space-y-4">
+                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
+                  <Check className="w-10 h-10 text-green-600 dark:text-green-400" />
+                </div>
+                <h2 className="text-3xl font-bold">Your Agent is Ready!</h2>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Copy the embed code below and paste it into your website's
+                  HTML, just before the closing <code>&lt;/body&gt;</code> tag.
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Embed Code</CardTitle>
+                  <CardDescription>
+                    Add this script tag to your website
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="relative">
+                    <pre className="bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+                      <code>{`<script 
+  src="${typeof window !== "undefined" ? window.location.origin : ""}/embed.js" 
+  data-agent-id="${generatedAgentId}"
+  data-primary-color="#2563eb"
+></script>`}</code>
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="absolute top-2 right-2"
+                      onClick={handleCopyEmbedCode}
+                    >
+                      {copied ? (
+                        <>
+                          <CheckCheck className="h-4 w-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <p className="font-medium">Customization Options:</p>
+                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                      <li>
+                        <code className="bg-muted px-1 py-0.5 rounded">
+                          data-primary-color
+                        </code>{" "}
+                        - Set widget color (default: #2563eb)
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 py-0.5 rounded">
+                          data-position
+                        </code>{" "}
+                        - Widget position: "bottom-right", "bottom-left"
+                        (default: bottom-right)
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 py-0.5 rounded">
+                          data-greeting
+                        </code>{" "}
+                        - Custom greeting message
+                      </li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setStep("input");
+                    setUrl("");
+                    setAnalysisResult(null);
+                    setProgressIndex(0);
+                    setCurrentJobId(null);
+                    setGeneratedAgentId(null);
+                  }}
+                >
+                  Create Another Agent
+                </Button>
+                <Button onClick={() => router.push("/dashboard")}>
+                  Go to Dashboard
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>

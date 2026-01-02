@@ -535,8 +535,30 @@ export default function AgentSetupPage() {
                   a <strong>{persona}</strong> persona.
                 </p>
 
-                <div className="bg-slate-900 text-slate-300 p-4 rounded-lg text-left text-sm font-mono mb-8 overflow-x-auto">
-                  <code>{`<script src="https://webrep.ai/embed.js" data-agent-id="${generatedAgentId}"></script>`}</code>
+                <div className="space-y-4">
+                  <div className="bg-slate-900 text-slate-300 p-4 rounded-lg text-left text-sm font-mono overflow-x-auto">
+                    <code>{`<script 
+  src="${window.location.origin}/embed.js" 
+  data-agent-id="${generatedAgentId}"
+  data-primary-color="#2563eb"
+></script>`}</code>
+                  </div>
+
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>
+                      💡 <strong>Customization Options:</strong>
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>
+                        <code>data-primary-color</code> - Set widget color
+                        (default: #2563eb)
+                      </li>
+                      <li>
+                        <code>data-position</code> - Widget position (default:
+                        bottom-right)
+                      </li>
+                    </ul>
+                  </div>
                 </div>
 
                 <Button size="lg" className="w-full" onClick={handleFinish}>
