@@ -1,6 +1,10 @@
 // lib/services/cache.ts
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/utils/logger";
+import { Database } from "@/lib/database.types";
+
+// ✅ Define proper types from Database schema
+type WebsiteEmbedding = Database["public"]["Tables"]["website_embeddings"]["Row"];
 
 interface CacheEntry {
   websiteUrl: string;
@@ -10,10 +14,176 @@ interface CacheEntry {
 }
 
 /**
- * Cache service to track recently analyzed websites
+ * Simple LRU Cache implementation for intent detection
+ */
+class LRUCache<K, V> {
+  private cache: Map<K, V>;
+  private maxSize: number;
+
+  constructor(maxSize: number = 1000) {
+    this.cache = new Map();
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    // Remove if exists to update position
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+    // Add to end
+    this.cache.set(key, value);
+
+    // Evict oldest if over capacity
+    if (this.cache.size > this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+
+  delete(key: K): boolean {
+    return this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+}
+
+/**
+ * Intent detection cache entry
+ */
+interface IntentCacheEntry {
+  hasIntent: boolean;
+  timestamp: number;
+  method: "keyword" | "llm" | "cached";
+}
+
+/**
+ * Cache service for website embeddings and intent detection
  */
 export class CacheService {
   private static CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Intent detection cache (in-memory LRU)
+  private static intentCache = new LRUCache<string, IntentCacheEntry>(1000);
+  private static INTENT_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+  /**
+   * Generate a cache key for intent detection
+   * Normalizes the message to improve cache hit rate
+   */
+  static generateIntentCacheKey(message: string): string {
+    // Normalize: lowercase, trim, remove extra spaces, remove punctuation
+    const normalized = message
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/[^\w\s]/g, "");
+
+    // For very similar messages, use first 100 chars
+    return normalized.substring(0, 100);
+  }
+
+  /**
+   * Get cached intent detection result
+   */
+  static getCachedIntent(message: string): IntentCacheEntry | null {
+    const key = this.generateIntentCacheKey(message);
+    const cached = this.intentCache.get(key);
+
+    if (!cached) {
+      return null;
+    }
+
+    // Check if cache entry is still valid
+    const age = Date.now() - cached.timestamp;
+    if (age > this.INTENT_CACHE_TTL) {
+      this.intentCache.delete(key);
+      logger.debug("Intent cache expired", {
+        messagePreview: message.substring(0, 30),
+      });
+      return null;
+    }
+
+    logger.debug("Intent cache HIT", {
+      messagePreview: message.substring(0, 30),
+      hasIntent: cached.hasIntent,
+      method: cached.method,
+      age: Math.round(age / 1000) + "s",
+    });
+
+    return cached;
+  }
+
+  /**
+   * Cache an intent detection result
+   */
+  static cacheIntent(
+    message: string,
+    hasIntent: boolean,
+    method: "keyword" | "llm"
+  ): void {
+    const key = this.generateIntentCacheKey(message);
+    const entry: IntentCacheEntry = {
+      hasIntent,
+      timestamp: Date.now(),
+      method,
+    };
+
+    this.intentCache.set(key, entry);
+
+    logger.debug("Intent cached", {
+      messagePreview: message.substring(0, 30),
+      hasIntent,
+      method,
+    });
+  }
+
+  /**
+   * Get intent cache statistics
+   */
+  static getIntentCacheStats(): {
+    size: number;
+    maxSize: number;
+    hitRate?: number;
+  } {
+    return {
+      size: this.intentCache.size,
+      maxSize: 1000,
+    };
+  }
+
+  /**
+   * Clear intent cache (useful for testing)
+   */
+  static clearIntentCache(): void {
+    this.intentCache.clear();
+    logger.info("Intent cache cleared");
+  }
+
+  // ============================================
+  // EXISTING WEBSITE CACHE METHODS (FIXED)
+  // ============================================
 
   /**
    * Check if a website was recently analyzed
@@ -51,29 +221,31 @@ export class CacheService {
 
   /**
    * Get cache entry for a website
+   * ✅ FIXED: Properly typed with explicit type annotations
    */
   static async getCacheEntry(websiteUrl: string): Promise<CacheEntry | null> {
     try {
       const supabase = await createClient();
 
-      // Check if we have recent embeddings
+      // ✅ FIX: Explicitly type the query result
       const { data, error } = await supabase
         .from("website_embeddings")
         .select("created_at")
         .eq("website_url", websiteUrl)
         .order("created_at", { ascending: false })
-        .limit(1);
+        .limit(1)
+        .maybeSingle<{ created_at: string }>(); // ✅ Explicit type for selected fields
 
       if (error) {
         logger.error("Database error checking cache", { error });
         return null;
       }
 
-      if (!data || data.length === 0) {
+      if (!data) {
         return null;
       }
 
-      // Count total pages
+      // Get count of pages for this website
       const { count } = await supabase
         .from("website_embeddings")
         .select("page_url", { count: "exact", head: true })
@@ -81,7 +253,7 @@ export class CacheService {
 
       return {
         websiteUrl,
-        lastScraped: data[0].created_at,
+        lastScraped: data.created_at, // ✅ TypeScript now knows this exists!
         pagesCount: count || 0,
         status: "completed",
       };
@@ -92,11 +264,9 @@ export class CacheService {
   }
 
   /**
-   * Mark a website as being analyzed (to prevent concurrent analyses)
+   * Mark a website as being analyzed
    */
   static async markInProgress(websiteUrl: string): Promise<void> {
-    // This is a simple implementation
-    // In production, you might want to use Redis or a proper job queue
     logger.info("Marked website as in progress", { websiteUrl });
   }
 
@@ -108,7 +278,7 @@ export class CacheService {
   }
 
   /**
-   * Invalidate cache for a website (force re-analysis)
+   * Invalidate cache for a website
    */
   static async invalidate(websiteUrl: string): Promise<void> {
     try {
@@ -133,6 +303,7 @@ export class CacheService {
 
   /**
    * Get cache statistics
+   * ✅ FIXED: Properly typed query results
    */
   static async getStats(): Promise<{
     totalWebsites: number;
@@ -142,11 +313,12 @@ export class CacheService {
     try {
       const supabase = await createClient();
 
-      // Get unique websites count
+      // ✅ FIX: Explicitly type the query result
       const { data: websites, error: websitesError } = await supabase
         .from("website_embeddings")
         .select("website_url")
-        .limit(1000);
+        .limit(1000)
+        .returns<{ website_url: string }[]>(); // ✅ Explicit return type
 
       if (websitesError) {
         throw websitesError;
@@ -154,7 +326,6 @@ export class CacheService {
 
       const uniqueWebsites = new Set(websites?.map((w) => w.website_url) || []);
 
-      // Get total pages count
       const { count, error: countError } = await supabase
         .from("website_embeddings")
         .select("page_url", { count: "exact", head: true });
