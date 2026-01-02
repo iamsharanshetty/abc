@@ -1,5 +1,5 @@
-// lib/services/browserScraper.ts - IMPROVED VERSION
-import puppeteer, { Browser, Page } from "puppeteer";
+// lib/services/browserScraper.ts - PRODUCTION READY FOR LOCAL + VERCEL
+import puppeteer, { Browser, Page } from "puppeteer-core";
 import { ContentParser, ParsedContent } from "./contentParser";
 import { config } from "../config";
 import { logger } from "@/lib/utils/logger";
@@ -19,7 +19,7 @@ export class BrowserScraper {
   private baseUrl: string;
   private baseHostname: string;
   private contentParser: ContentParser;
-  private minQualityScore: number = config.ingestion.minQualityScore; // Lowered from 30
+  private minQualityScore: number = config.ingestion.minQualityScore;
   private browser: Browser | null = null;
 
   constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
@@ -41,6 +41,10 @@ export class BrowserScraper {
   private isValidUrl(url: string): boolean {
     try {
       const urlObj = new URL(url);
+      // Ignore hash-only links (same page anchors)
+      if (urlObj.hash && urlObj.pathname === new URL(this.baseUrl).pathname) {
+        return false;
+      }
       return urlObj.hostname === this.baseHostname;
     } catch {
       return false;
@@ -48,61 +52,166 @@ export class BrowserScraper {
   }
 
   /**
-   * Initialize browser with better stealth configuration
+   * Normalize URL by removing hash fragments
+   */
+  private normalizePageUrl(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      // Remove hash to avoid treating anchors as different pages
+      urlObj.hash = "";
+      return urlObj.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  /**
+   * Detect if running in serverless environment
+   */
+  private isServerlessEnvironment(): boolean {
+    return !!(
+      process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_VERSION ||
+      process.env.TRIGGER_ENV ||
+      process.env.AWS_EXECUTION_ENV
+    );
+  }
+
+  /**
+   * Get Chrome configuration based on environment
+   */
+  private async getChromeConfig(): Promise<{
+    executablePath?: string;
+    args: string[];
+  }> {
+    const baseArgs = [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-web-security",
+      "--disable-features=IsolateOrigins,site-per-process",
+      "--window-size=1920,1080",
+      "--disable-gpu",
+    ];
+
+    // Serverless environment (Vercel, AWS Lambda, Trigger.dev)
+    if (this.isServerlessEnvironment()) {
+      logger.info("☁️  Serverless environment detected");
+
+      try {
+        const chromium = await import("@sparticuz/chromium");
+        const executablePath = await chromium.default.executablePath();
+
+        logger.info("Using @sparticuz/chromium", { executablePath });
+
+        return {
+          executablePath,
+          args: [
+            ...baseArgs,
+            ...chromium.default.args,
+            "--single-process",
+            "--no-zygote",
+          ],
+        };
+      } catch (error) {
+        logger.error("Failed to load @sparticuz/chromium", { error });
+        throw new Error(
+          "Running in serverless but @sparticuz/chromium not available. " +
+            "Please install: pnpm add @sparticuz/chromium"
+        );
+      }
+    }
+
+    // Local development - use Puppeteer's bundled Chrome
+    logger.info("💻 Local environment detected");
+
+    try {
+      // Try to get executablePath from puppeteer
+      const puppeteerFull = await import("puppeteer");
+      const executablePath = puppeteerFull.executablePath();
+
+      logger.info("Using Puppeteer bundled Chrome", { executablePath });
+
+      return {
+        executablePath,
+        args: baseArgs,
+      };
+    } catch (error) {
+      // Fallback: let puppeteer-core find Chrome
+      logger.warn(
+        "Could not get Puppeteer executable path, using system Chrome"
+      );
+
+      return {
+        args: baseArgs,
+      };
+    }
+  }
+
+  /**
+   * Initialize browser with environment-aware configuration
    */
   private async initBrowser(): Promise<Browser> {
     if (this.browser) {
       return this.browser;
     }
 
-    console.log("🚀 Launching browser...");
+    logger.info("🚀 Launching browser...");
 
-    this.browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-blink-features=AutomationControlled",
-        "--disable-web-security",
-        "--disable-features=IsolateOrigins,site-per-process",
-        "--window-size=1920,1080",
-      ],
-    });
+    try {
+      const chromeConfig = await this.getChromeConfig();
 
-    return this.browser;
+      const launchOptions: any = {
+        headless: true,
+        ...chromeConfig,
+      };
+
+      this.browser = await puppeteer.launch(launchOptions);
+      logger.info("✅ Browser launched successfully");
+
+      return this.browser;
+    } catch (error) {
+      logger.error("Failed to launch browser", { error });
+
+      // Provide helpful error messages
+      if (error instanceof Error) {
+        if (error.message.includes("Could not find Chrome")) {
+          throw new Error(
+            "Chrome not found. For local development, run:\n" +
+              "  npx puppeteer browsers install chrome\n\n" +
+              "For Vercel deployment, ensure @sparticuz/chromium is installed:\n" +
+              "  pnpm add @sparticuz/chromium"
+          );
+        }
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Configure page with stealth settings
    */
   private async configurePage(page: Page): Promise<void> {
-    // Ignore HTTPS errors
     await page.setBypassCSP(true);
-
-    // Set a realistic viewport
     await page.setViewport({ width: 1920, height: 1080 });
-
-    // Set a realistic user agent
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     );
 
-    // Remove webdriver flag
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, "webdriver", {
         get: () => false,
       });
     });
 
-    // Add realistic browser properties
     await page.evaluateOnNewDocument(() => {
       (window.navigator as any).chrome = {
         runtime: {},
       };
     });
 
-    // Set extra headers
     await page.setExtraHTTPHeaders({
       "Accept-Language": "en-US,en;q=0.9",
       Accept:
@@ -114,11 +223,14 @@ export class BrowserScraper {
    * Scrape a single page using Puppeteer with improved error handling
    */
   async scrapePage(url: string): Promise<BrowserScrapedPage | null> {
-    if (this.visited.has(url) || this.visited.size >= this.maxPages) {
+    // Normalize URL to remove hash fragments
+    const normalizedUrl = this.normalizePageUrl(url);
+
+    if (this.visited.has(normalizedUrl) || this.visited.size >= this.maxPages) {
       return null;
     }
 
-    this.visited.add(url);
+    this.visited.add(normalizedUrl);
     let page: Page | null = null;
 
     try {
@@ -127,10 +239,8 @@ export class BrowserScraper {
       const browser = await this.initBrowser();
       page = await browser.newPage();
 
-      // Configure page with stealth settings
       await this.configurePage(page);
 
-      // Navigate with longer timeout
       try {
         await page.goto(url, {
           waitUntil: "domcontentloaded",
@@ -142,7 +252,6 @@ export class BrowserScraper {
         });
       }
 
-      // Wait for content
       await Promise.race([
         page.waitForSelector("body", { timeout: 10000 }),
         page.waitForFunction("document.body.innerText.length > 100", {
@@ -153,15 +262,11 @@ export class BrowserScraper {
         logger.warn("Content wait timeout, proceeding anyway", { url });
       });
 
-      // Additional wait for dynamic content
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Get the HTML after JavaScript execution
       const html = await page.content();
-
       logger.debug("Browser fetch complete", { url, htmlLength: html.length });
 
-      // Extract visible text
       const visibleText = await page.evaluate(
         () => document.body.innerText || document.body.textContent || ""
       );
@@ -178,7 +283,6 @@ export class BrowserScraper {
         );
       }
 
-      // Extract all links
       const links = await page.evaluate((baseHostname) => {
         const anchors = Array.from(document.querySelectorAll("a[href]"));
         return anchors
@@ -186,21 +290,27 @@ export class BrowserScraper {
           .filter((href) => {
             try {
               const url = new URL(href);
-              return url.hostname === baseHostname;
+              // Remove hash to normalize URLs
+              url.hash = "";
+              const normalized = url.toString();
+              return url.hostname === baseHostname && normalized;
             } catch {
               return false;
             }
+          })
+          .map((href) => {
+            // Return normalized URL without hash
+            const url = new URL(href);
+            url.hash = "";
+            return url.toString();
           });
       }, this.baseHostname);
 
-      // Close the page before processing content
       await page.close();
-      page = null; // Clear reference
+      page = null;
 
-      // Parse content
       const parsedContent = this.contentParser.parse(html, url);
 
-      // If parsing failed, use visible text directly
       if (parsedContent.metadata.wordCount === 0 && visibleText.length > 100) {
         logger.debug(
           "HTML parsing returned 0 words, using visible text directly",
@@ -227,8 +337,9 @@ export class BrowserScraper {
         words: parsedContent.metadata.wordCount,
       });
 
+      // Use normalized URL for consistency
       return {
-        url,
+        url: normalizedUrl,
         title: parsedContent.title,
         content: parsedContent.mainContent,
         parsedContent,
@@ -239,7 +350,6 @@ export class BrowserScraper {
       logger.error("Error scraping page", { url, error });
       return null;
     } finally {
-      // CRITICAL: Always close the page, even if errors occurred
       if (page) {
         try {
           await page.close();
@@ -260,7 +370,6 @@ export class BrowserScraper {
     let skippedLowQuality = 0;
 
     try {
-      // Initialize browser at the start
       await this.initBrowser();
 
       while (queue.length > 0 && pages.length < this.maxPages) {
@@ -279,7 +388,6 @@ export class BrowserScraper {
               pages.push(page);
               logger.debug("Added page", { url, quality: page.qualityScore });
 
-              // Add new links to queue
               for (const link of page.links) {
                 if (!inQueue.has(link) && !this.visited.has(link)) {
                   queue.push(link);
@@ -296,10 +404,8 @@ export class BrowserScraper {
           }
         } catch (error) {
           logger.error("Error scraping page", { url, error });
-          // Continue with next page instead of failing entire operation
         }
 
-        // Rate limiting between pages
         await new Promise((resolve) =>
           setTimeout(resolve, config.scraping.pageWaitTime)
         );
@@ -316,7 +422,6 @@ export class BrowserScraper {
       logger.error("Browser scraping failed", { error });
       throw error;
     } finally {
-      // CRITICAL: Always close the browser, even if errors occurred
       await this.closeBrowser();
     }
   }
@@ -326,9 +431,9 @@ export class BrowserScraper {
    */
   async closeBrowser(): Promise<void> {
     if (this.browser) {
-      console.log("🔒 Closing browser...");
+      logger.info("🔒 Closing browser...");
       await this.browser.close().catch((err) => {
-        console.error("Error closing browser:", err);
+        logger.error("Error closing browser:", err);
       });
       this.browser = null;
     }

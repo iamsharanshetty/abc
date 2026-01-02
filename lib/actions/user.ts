@@ -46,7 +46,7 @@ export async function saveOnboardingData(data: {
           referral_source: data.referral_source,
           onboarding_completed: true,
           onboarding_answers: data.onboarding_answers || [],
-        })
+        } as any)
         .eq("id", user.id);
 
       if (error) {
@@ -63,7 +63,7 @@ export async function saveOnboardingData(data: {
         referral_source: data.referral_source,
         onboarding_completed: true,
         onboarding_answers: data.onboarding_answers || [],
-      });
+      } as any);
 
       if (error) {
         logger.error("Error creating profile", { error: error.message });
@@ -140,7 +140,7 @@ export async function updateUserProfile(updates: {
 
     const { error } = await supabase
       .from("profiles")
-      .update(updates)
+      .update(updates as any)
       .eq("id", user.id);
 
     if (error) {

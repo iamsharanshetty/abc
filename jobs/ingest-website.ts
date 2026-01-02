@@ -1,4 +1,4 @@
-// jobs/ingest-website.ts - CORRECTED VERSION
+// jobs/ingest-website.ts - FINAL FIXED VERSION
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { WebScraper } from "@/lib/services/scraper";
 import { BrowserScraper } from "@/lib/services/browserScraper";
@@ -52,7 +52,7 @@ export const ingestWebsiteTask = task({
     try {
       const supabase = createServiceClient();
       logger.info("✓ Supabase service client created");
-      await logger.info("🔍 Step 1/4: Starting website scraping...");
+      await logger.info("📝 Step 1/4: Starting website scraping...");
 
       let pages;
       let scraperUsed: "axios" | "puppeteer";
@@ -162,20 +162,25 @@ export const ingestWebsiteTask = task({
         deduplication: dedupStats,
       };
 
-      // ✅ Log Analytics Event
+      // ✅ Log Analytics Event (FIXED: Use service client for background jobs)
       try {
         const { AnalyticsService } = await import("@/lib/services/analytics");
-        await AnalyticsService.logEvent("agent_created", {
-          // simple session ID or just omit if not available in job
-          userId: payload.userId,
-          websiteUrl: payload.url,
-          metadata: {
-            pagesProcessed: processedPages,
-            embeddingsCreated: totalEmbeddings,
-            duration,
-            scraperUsed,
+        await AnalyticsService.logEvent(
+          "agent_created",
+          {
+            userId: payload.userId,
+            websiteUrl: payload.url,
+            metadata: {
+              pagesProcessed: processedPages,
+              embeddingsCreated: totalEmbeddings,
+              duration,
+              scraperUsed,
+            },
           },
-        });
+          true // ← IMPORTANT: Pass true to use service client (no cookies required)
+        );
+
+        logger.info("Analytics event logged successfully");
       } catch (logError) {
         // Don't fail the job if analytics fails
         logger.error("Failed to log analytics event", { error: logError });
