@@ -34,7 +34,7 @@ export interface IngestWebsiteResult {
 
 export const ingestWebsiteTask = task({
   id: "ingest-website",
-  maxDuration: 300,
+  maxDuration: 1200,
   retry: {
     maxAttempts: 3,
     factor: 2,

@@ -150,12 +150,14 @@ export class ContentParser {
 
   /**
    * Extract main content using intelligent selectors with fallback
+   * ✅ IMPROVED: Lowered threshold from 200 to 100 chars to capture more content
    */
   private extractMainContent($: cheerio.Root): string {
     // Try each content selector in priority order
     for (const selector of this.CONTENT_SELECTORS) {
       const content = $(selector).first().text();
-      if (content && content.trim().length > 200) {
+      // ✅ FIXED: Lower threshold to capture more content (was 200)
+      if (content && content.trim().length > 100) {
         console.log(`    ✓ Found content using selector: ${selector}`);
         return content;
       }
@@ -174,7 +176,8 @@ export class ContentParser {
       }
     });
 
-    if (largestContent.length > 100) {
+    // ✅ FIXED: Lower threshold from 100 to 50 chars
+    if (largestContent.length > 50) {
       console.log(
         `    ✓ Found ${largestContent.length} chars in largest block`
       );
@@ -185,7 +188,7 @@ export class ContentParser {
     console.log(`    ⚠️  Using body content as last resort`);
     const bodyContent = $("body").text().trim();
 
-    if (bodyContent.length < 100) {
+    if (bodyContent.length < 50) {
       console.warn(
         `    ⚠️  Body content is very small (${bodyContent.length} chars) - possible JS-rendered site`
       );

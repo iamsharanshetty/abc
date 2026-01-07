@@ -45,16 +45,12 @@ export class LangChainService {
   } {
     const { role } = context;
 
-    // Build the base prompt with ALL variables as placeholders
     let templateString = `You are an AI assistant for a website. Your role is: {role}.`;
 
-    // Conditionally add persona section
     templateString += `\n\nPersona: {persona}`;
-
-    // Conditionally add tone section
     templateString += `\n\nTone: {tone}`;
 
-    // Add role-specific instructions based on role type
+    // Role-specific instructions
     if (role === "sales") {
       templateString += `\n\nYour goal is to help potential customers understand the product/service and guide them toward making a purchase. Be helpful, persuasive, and professional. When you sense interest, ask for contact information to follow up.`;
     } else if (role === "support") {
@@ -65,14 +61,26 @@ export class LangChainService {
       templateString += `\n\nYour goal is to assist users with their questions and provide helpful information.`;
     }
 
-    // Add context retrieval section
-    templateString += `\n\nRelevant information from the website:\n{context}`;
+    // ✅ FIXED: More confident prompt
+    templateString += `\n\n=== WEBSITE INFORMATION ===
+The following is relevant information from the website that should help you answer the user's question:
 
-    // Add lead capture instructions
-    templateString += `\n\nIMPORTANT: If the user expresses interest (e.g., wants a demo, quote, more information, or to purchase), politely ask for their contact information. Say something like: "I'd be happy to help you with that! Could you please share your name and email so our team can follow up with you?"`;
+{context}
 
-    // Add fallback instructions
-    templateString += `\n\nIf you don't have information about something, politely say: "I don't have that specific information right now, but I'd be happy to connect you with someone who can help. Would you like to share your contact details?"`;
+IMPORTANT INSTRUCTIONS:
+1. Answer questions directly and confidently using the information from the context above
+2. Look for company names, product names, features, and services in the context
+3. Even if the context seems partial, extract and use any relevant information you find
+4. Be helpful and informative - use the information provided
+5. Only say you don't have information if the context is COMPLETELY EMPTY
+6. When you see company/product names in the context, use them confidently
+=== END WEBSITE INFORMATION ===`;
+
+    // Lead capture...
+    templateString += `\n\nLEAD CAPTURE: If the user expresses interest (e.g., wants a demo, quote, more information, or to purchase), politely ask for their contact information.`;
+
+    // ✅ FIXED: Less defensive fallback
+    templateString += `\n\nFALLBACK RESPONSE: ONLY use this if context is completely empty: "I don't have that specific information in my knowledge base right now, but I'd be happy to connect you with someone who can help."`;
 
     // Add conversation history section
     templateString += `\n\nPrevious conversation:\n{conversationHistory}`;
@@ -80,7 +88,6 @@ export class LangChainService {
     // Current user message
     templateString += `\n\nUser: {userMessage}\n\nAssistant:`;
 
-    // Define all input variables that will be provided
     const inputVariables = [
       "role",
       "persona",
@@ -175,17 +182,30 @@ export class LangChainService {
     context: AgentContext,
     userMessage: string,
     relevantContext: string[],
-    settings?: { temperature?: number; maxTokens?: number } // ✅ NEW parameter
+    settings?: { temperature?: number; maxTokens?: number }
   ): Promise<string> {
     try {
-      // ✅ Pass settings to chain creation
       const chain = this.createAgentChain(context, settings);
 
-      // Format inputs
-      const contextText =
-        relevantContext.length > 0
-          ? relevantContext.join("\n\n")
-          : "No specific information available.";
+      // ✅ ENHANCED: Better context formatting with debugging
+      let contextText = "No specific information available.";
+
+      if (relevantContext.length > 0) {
+        contextText = relevantContext.join("\n\n");
+
+        logger.info("📚 Using retrieved context", {
+          chunks: relevantContext.length,
+          totalLength: contextText.length,
+          preview: contextText.substring(0, 200) + "...",
+        });
+      } else {
+        logger.warn(
+          "⚠️  No context retrieved - agent will respond without website info",
+          {
+            userMessage: userMessage.substring(0, 50),
+          }
+        );
+      }
 
       const conversationHistoryText = this.formatConversationHistory(
         context.conversationHistory
@@ -195,8 +215,9 @@ export class LangChainService {
         contextLength: contextText.length,
         historyLength: conversationHistoryText.length,
         role: context.role,
-        temperature: settings?.temperature ?? 0.7, // ✅ Log the settings being used
+        temperature: settings?.temperature ?? 0.7,
         maxTokens: settings?.maxTokens ?? 500,
+        hasContext: relevantContext.length > 0, // ✅ Track this
       });
 
       // Invoke the chain with properly mapped inputs
@@ -206,13 +227,33 @@ export class LangChainService {
         userMessage: userMessage,
       });
 
+      // ✅ NEW: Detect if response indicates missing info
+      const noInfoIndicators = [
+        "don't have that specific information",
+        "don't have information about",
+        "I don't have specific information",
+        "not sure about",
+      ];
+
+      const seemsLikeNoInfo = noInfoIndicators.some((indicator) =>
+        response.toLowerCase().includes(indicator.toLowerCase())
+      );
+
+      if (seemsLikeNoInfo && relevantContext.length === 0) {
+        logger.warn("🚨 DIAGNOSIS: Agent lacks context!", {
+          userQuery: userMessage.substring(0, 50),
+          contextRetrieved: 0,
+          responsePreview: response.substring(0, 100),
+          recommendation: "Check if embeddings exist for this website",
+        });
+      }
+
       return response;
     } catch (error) {
       logger.error("Error in LangChain generation", { error });
       throw error;
     }
   }
-
   /**
    * Batch generate responses (for testing multiple questions)
    * ✅ NOW ACCEPTS SETTINGS parameter

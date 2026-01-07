@@ -119,7 +119,7 @@ export default function DemoEmbedPage() {
       {/* This renders the chat widget directly on the page */}
       {/* No black screen, no iframe issues, fully integrated */}
       <ChatWidget
-        agentId="test-agent-001"
+        agentId="0bd7d7df-35d2-4c33-b2af-f5c4a01f7aaa"
         primaryColor="#2563eb"
         title="Acme Support"
       />

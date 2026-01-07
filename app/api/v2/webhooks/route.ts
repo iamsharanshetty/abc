@@ -153,7 +153,7 @@ async function validateWebhookResponse(
     // Parse based on content type
     if (contentType.includes("application/json")) {
       const text = await response.text();
-      
+
       // Check for empty response
       if (!text || text.trim().length === 0) {
         return {
@@ -164,7 +164,7 @@ async function validateWebhookResponse(
 
       try {
         parsed = JSON.parse(text);
-      } catch (parseError) {
+      } catch {
         return {
           valid: false,
           error: "Invalid JSON in response",
@@ -174,7 +174,7 @@ async function validateWebhookResponse(
       // Validate required fields if specified
       if (options.expectedStructure?.requiredFields) {
         const missingFields: string[] = [];
-        
+
         for (const field of options.expectedStructure.requiredFields) {
           // Support nested field checking (e.g., "data.id")
           const fieldParts = field.split(".");
@@ -219,7 +219,9 @@ async function validateWebhookResponse(
   } catch (error) {
     return {
       valid: false,
-      error: `Failed to validate response: ${error instanceof Error ? error.message : String(error)}`,
+      error: `Failed to validate response: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     };
   }
 }
@@ -227,28 +229,28 @@ async function validateWebhookResponse(
 /**
  * ✅ NEW: Verify webhook signature (for webhooks that support it)
  */
-function verifyWebhookSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): boolean {
-  try {
-    // Using crypto (Node.js built-in)
-    const crypto = require("crypto");
-    const hmac = crypto.createHmac("sha256", secret);
-    hmac.update(payload);
-    const expectedSignature = hmac.digest("hex");
+// function verifyWebhookSignature(
+//   payload: string,
+//   signature: string,
+//   secret: string
+// ): boolean {
+//   try {
+//     // Using crypto (Node.js built-in)
+//     const crypto = require("crypto");
+//     const hmac = crypto.createHmac("sha256", secret);
+//     hmac.update(payload);
+//     const expectedSignature = hmac.digest("hex");
 
-    // Compare signatures (timing-safe comparison)
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-  } catch (error) {
-    logger.error("Signature verification failed", { error });
-    return false;
-  }
-}
+//     // Compare signatures (timing-safe comparison)
+//     return crypto.timingSafeEqual(
+//       Buffer.from(signature),
+//       Buffer.from(expectedSignature)
+//     );
+//   } catch (error) {
+//     logger.error("Signature verification failed", { error });
+//     return false;
+//   }
+// }
 
 /**
  * ✅ ENHANCED: Test webhook with comprehensive validation
@@ -305,18 +307,25 @@ async function webhookTestHandler(request: NextRequest) {
     };
 
     // ✅ NEW: Add signature if requested
-    if (validationOptions.verifySignature && validationOptions.signatureSecret) {
+    if (
+      validationOptions.verifySignature &&
+      validationOptions.signatureSecret
+    ) {
       const crypto = require("crypto");
-      const hmac = crypto.createHmac("sha256", validationOptions.signatureSecret);
+      const hmac = crypto.createHmac(
+        "sha256",
+        validationOptions.signatureSecret
+      );
       hmac.update(payloadString);
       const signature = hmac.digest("hex");
-      headers[validationOptions.signatureHeader || "X-Webhook-Signature"] = signature;
+      headers[validationOptions.signatureHeader || "X-Webhook-Signature"] =
+        signature;
     }
 
     // ✅ ENHANCED: Make request with timing
     const startTime = Date.now();
     let response: Response;
-    
+
     try {
       response = await fetch(body.webhookUrl, {
         method: "POST",
@@ -381,7 +390,7 @@ async function webhookTestHandler(request: NextRequest) {
     // ✅ NEW: Generate message and recommendations
     if (testResult.testSuccessful) {
       testResult.message = `✓ Webhook is configured correctly (${responseTime}ms response time)`;
-      
+
       if (responseTime > 3000) {
         testResult.recommendations?.push(
           "⚠️ Response time is slow (>3s). Consider optimizing your webhook handler."
@@ -393,7 +402,7 @@ async function webhookTestHandler(request: NextRequest) {
         testResult.message = `✗ Webhook returned error status ${response.status}`;
         testResult.recommendations?.push(
           `Check webhook logs to see why it returned ${response.status}`,
-          "Verify the webhook handler can process the test payload",
+          "Verify the webhook handler can process the test payload"
         );
 
         if (response.status === 404) {
@@ -414,10 +423,12 @@ async function webhookTestHandler(request: NextRequest) {
       // Response body issues
       if (!testResult.validation.responseBodyValid) {
         testResult.message += ` - ${testResult.validation.responseBodyError}`;
-        
+
         if (testResult.validation.missingFields?.length) {
           testResult.recommendations?.push(
-            `Expected fields missing: ${testResult.validation.missingFields.join(", ")}`
+            `Expected fields missing: ${testResult.validation.missingFields.join(
+              ", "
+            )}`
           );
         }
 

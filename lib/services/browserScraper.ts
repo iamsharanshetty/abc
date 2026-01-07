@@ -17,12 +17,14 @@ export class BrowserScraper {
   private visited: Set<string> = new Set();
   private maxPages: number;
   private baseUrl: string;
+  private originalUrl: string; // ✅ NEW: Preserve original URL with path
   private baseHostname: string;
   private contentParser: ContentParser;
   private minQualityScore: number = config.ingestion.minQualityScore;
   private browser: Browser | null = null;
 
   constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
+    this.originalUrl = baseUrl; // ✅ NEW: Store original URL
     this.baseUrl = this.normalizeUrl(baseUrl);
     this.maxPages = maxPages;
     this.baseHostname = new URL(this.baseUrl).hostname;
@@ -242,27 +244,46 @@ export class BrowserScraper {
       await this.configurePage(page);
 
       try {
+        // ✅ IMPROVED: Use networkidle2 for better SPA support (waits for network to be idle)
         await page.goto(url, {
-          waitUntil: "domcontentloaded",
+          waitUntil: "networkidle2", // Wait until network is idle (better for SPAs)
           timeout: config.scraping.browserTimeout,
         });
       } catch (navError) {
-        logger.warn("Navigation timeout, but page may have loaded partially", {
+        logger.warn("Navigation timeout, trying domcontentloaded fallback", {
           url,
         });
+        // Fallback to domcontentloaded if networkidle2 times out
+        try {
+          await page.goto(url, {
+            waitUntil: "domcontentloaded",
+            timeout: 15000,
+          });
+        } catch (fallbackError) {
+          logger.warn("Fallback navigation also failed, proceeding anyway", {
+            url,
+          });
+        }
       }
 
+      // ✅ IMPROVED: Wait for content to load with multiple strategies
       await Promise.race([
         page.waitForSelector("body", { timeout: 10000 }),
         page.waitForFunction("document.body.innerText.length > 100", {
           timeout: 10000,
         }),
+        // Wait for common SPA indicators
+        page.waitForFunction(
+          "document.querySelector('[data-testid], [class*=\"content\"], main, article') !== null",
+          { timeout: 10000 }
+        ),
         new Promise((resolve) => setTimeout(resolve, 5000)),
       ]).catch(() => {
         logger.warn("Content wait timeout, proceeding anyway", { url });
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // ✅ IMPROVED: Wait longer for JavaScript to render content (SPAs need more time)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const html = await page.content();
       logger.debug("Browser fetch complete", { url, htmlLength: html.length });
@@ -283,28 +304,60 @@ export class BrowserScraper {
         );
       }
 
+      // ✅ IMPROVED: Extract links with better error handling and logging
       const links = await page.evaluate((baseHostname) => {
-        const anchors = Array.from(document.querySelectorAll("a[href]"));
-        return anchors
-          .map((a) => (a as HTMLAnchorElement).href)
-          .filter((href) => {
-            try {
+        try {
+          const anchors = Array.from(document.querySelectorAll("a[href]"));
+          
+          // ✅ NEW: Log total anchors found for debugging
+          console.log(`Found ${anchors.length} anchor elements on page`);
+          
+          const allLinks = anchors
+            .map((a) => {
+              try {
+                return (a as HTMLAnchorElement).href;
+              } catch {
+                return null;
+              }
+            })
+            .filter((href): href is string => {
+              if (!href) return false;
+              // Skip hash-only, javascript:, mailto:, tel: links
+              if (href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+                return false;
+              }
+              try {
+                const url = new URL(href);
+                // Remove hash to normalize URLs
+                url.hash = "";
+                return url.hostname === baseHostname;
+              } catch {
+                return false;
+              }
+            })
+            .map((href) => {
+              // Return normalized URL without hash
               const url = new URL(href);
-              // Remove hash to normalize URLs
               url.hash = "";
-              const normalized = url.toString();
-              return url.hostname === baseHostname && normalized;
-            } catch {
-              return false;
-            }
-          })
-          .map((href) => {
-            // Return normalized URL without hash
-            const url = new URL(href);
-            url.hash = "";
-            return url.toString();
-          });
+              return url.toString();
+            });
+          
+          // Remove duplicates
+          const uniqueLinks = [...new Set(allLinks)];
+          console.log(`Extracted ${uniqueLinks.length} unique links from ${anchors.length} anchors`);
+          return uniqueLinks;
+        } catch (error) {
+          console.error("Error extracting links:", error);
+          return [];
+        }
       }, this.baseHostname);
+
+      // ✅ NEW: Log discovered links for debugging
+      logger.info("Links discovered", {
+        url,
+        totalLinks: links.length,
+        sampleLinks: links.slice(0, 10), // Show first 10 links
+      });
 
       await page.close();
       page = null;
@@ -362,11 +415,14 @@ export class BrowserScraper {
 
   /**
    * Scrape entire website using browser
+   * ✅ IMPROVED: Start from original URL (preserves path) instead of just base domain
    */
   async scrapeWebsite(): Promise<BrowserScrapedPage[]> {
     const pages: BrowserScrapedPage[] = [];
-    const queue: string[] = [this.baseUrl];
-    const inQueue = new Set<string>([this.baseUrl]);
+    // ✅ FIXED: Use original URL (with path) as starting point, fallback to baseUrl
+    const startUrl = this.originalUrl || this.baseUrl;
+    const queue: string[] = [startUrl];
+    const inQueue = new Set<string>([startUrl]);
     let skippedLowQuality = 0;
 
     try {
@@ -388,11 +444,33 @@ export class BrowserScraper {
               pages.push(page);
               logger.debug("Added page", { url, quality: page.qualityScore });
 
+              // ✅ IMPROVED: Better logging for link discovery
+              if (page.links.length > 0) {
+                logger.info(`Found ${page.links.length} links on page`, {
+                  url,
+                  links: page.links.slice(0, 10), // Log first 10 links
+                });
+              }
+
+              let linksAdded = 0;
               for (const link of page.links) {
                 if (!inQueue.has(link) && !this.visited.has(link)) {
                   queue.push(link);
                   inQueue.add(link);
+                  linksAdded++;
                 }
+              }
+              
+              if (linksAdded > 0) {
+                logger.info(`Added ${linksAdded} new links to queue`, {
+                  url,
+                  queueSize: queue.length,
+                });
+              } else if (page.links.length > 0) {
+                logger.debug("All links already visited or queued", {
+                  url,
+                  totalLinks: page.links.length,
+                });
               }
             } else {
               skippedLowQuality++;

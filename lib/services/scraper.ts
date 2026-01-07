@@ -48,11 +48,13 @@ export class WebScraper {
   private visited: Set<string> = new Set();
   private maxPages: number;
   private baseUrl: string;
+  private originalUrl: string; // ✅ NEW: Preserve original URL with path
   private baseHostname: string;
   private contentParser: ContentParser;
   private minQualityScore: number = config.ingestion.minQualityScore; // Lowered from 30
 
   constructor(baseUrl: string, maxPages: number = config.ingestion.maxPages) {
+    this.originalUrl = baseUrl; // ✅ NEW: Store original URL
     this.baseUrl = this.normalizeUrl(baseUrl);
     this.maxPages = maxPages;
     this.baseHostname = new URL(this.baseUrl).hostname;
@@ -84,22 +86,32 @@ export class WebScraper {
   }
 
   /**
-   * Extract links from HTML (excluding anchors and hash links)
+   * Extract links from HTML (including relative links)
+   * ✅ IMPROVED: Now handles both absolute and relative links
    */
-  private extractLinks(html: string): string[] {
-    const linkRegex = /href=["'](https?:\/\/[^"']+)["']/gi;
+  private extractLinks(html: string, currentUrl: string): string[] {
+    // ✅ IMPROVED: Match both absolute and relative hrefs
+    const linkRegex = /href=["']([^"']+)["']/gi;
     const links: string[] = [];
     const seenLinks = new Set<string>();
 
     let match;
     while ((match = linkRegex.exec(html)) !== null) {
       const url = match[1];
+      
+      // Skip hash-only links and javascript: links
+      if (url.startsWith("#") || url.startsWith("javascript:") || url.startsWith("mailto:") || url.startsWith("tel:")) {
+        continue;
+      }
+
       try {
-        const absoluteUrl = new URL(url, this.baseUrl).href;
+        // ✅ FIXED: Use currentUrl (not baseUrl) for resolving relative links
+        const absoluteUrl = new URL(url, currentUrl).href;
         const urlWithoutHash = absoluteUrl.split("#")[0];
         const baseWithoutHash = this.baseUrl.split("#")[0];
 
-        if (urlWithoutHash === baseWithoutHash) {
+        // Skip if it's the same as base URL (homepage)
+        if (urlWithoutHash === baseWithoutHash || urlWithoutHash === baseWithoutHash + "/") {
           continue;
         }
 
@@ -114,6 +126,11 @@ export class WebScraper {
       } catch {
         // Invalid URL, skip
       }
+    }
+
+    // ✅ NEW: Log discovered links for debugging
+    if (links.length > 0) {
+      console.log(`    Found ${links.length} new links to crawl`);
     }
 
     return links;
@@ -194,8 +211,8 @@ export class WebScraper {
       const qualityScore =
         this.contentParser.calculateQualityScore(parsedContent);
 
-      // Extract links for crawling
-      const links = this.extractLinks(html);
+      // Extract links for crawling (pass current URL for relative link resolution)
+      const links = this.extractLinks(html, url);
 
       console.log(
         `✓ Parsed ${url} - Quality: ${qualityScore}/100 - Words: ${parsedContent.metadata.wordCount}`
@@ -243,13 +260,17 @@ export class WebScraper {
 
   /**
    * Scrape website with quality filtering
+   * ✅ IMPROVED: Start from original URL (preserves path) instead of just base domain
    */
   async scrapeWebsite(): Promise<ScrapedPage[]> {
     const pages: ScrapedPage[] = [];
     const queue = new Queue<string>();
-    queue.enqueue(this.baseUrl);
+    
+    // ✅ FIXED: Use original URL (with path) as starting point, fallback to baseUrl
+    const startUrl = this.originalUrl || this.baseUrl;
+    queue.enqueue(startUrl);
 
-    const inQueue = new Set<string>([this.baseUrl]);
+    const inQueue = new Set<string>([startUrl]);
     let skippedLowQuality = 0;
 
     while (!queue.isEmpty() && pages.length < this.maxPages) {

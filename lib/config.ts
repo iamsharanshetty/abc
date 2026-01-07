@@ -1,11 +1,11 @@
 // lib/config.ts
-// ✅ SAFE: This file can be imported anywhere (client or server)
-// ❌ DO NOT add any secrets here!
+//  SAFE: This file can be imported anywhere (client or server)
+//  DO NOT add any secrets here!
 
 import { z } from "zod";
 
 const envSchema = z.object({
-  // ✅ REMOVED: OPENAI_API_KEY - moved to config.server.ts
+  // REMOVED: OPENAI_API_KEY - moved to config.server.ts
 
   // Public Supabase credentials (safe to expose)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL"),
@@ -29,7 +29,7 @@ const envSchema = z.object({
 function validateEnv() {
   try {
     return envSchema.parse({
-      // ✅ REMOVED: OPENAI_API_KEY validation
+      //  REMOVED: OPENAI_API_KEY validation
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       LOG_LEVEL: process.env.LOG_LEVEL,
@@ -54,8 +54,8 @@ function validateEnv() {
 const env = validateEnv();
 
 export const config = {
-  // ✅ OpenAI settings (non-secret)
-  // ❌ NO API KEY HERE - it's in config.server.ts
+  //  OpenAI settings (non-secret)
+  //  NO API KEY HERE - it's in config.server.ts
   openai: {
     embeddingModel: "text-embedding-3-small" as const,
     maxTokens: 8191,

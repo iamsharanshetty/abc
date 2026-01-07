@@ -63,10 +63,10 @@ export class AIAgentService {
       const supabase = await createClient();
 
       const contextRetrievalCount = settings?.contextRetrievalCount || 5;
-      const matchThreshold = settings?.matchThreshold || 0.7;
+      const matchThreshold = settings?.matchThreshold || 0.5; // Lowered from 0.7
 
       const validatedCount = Math.min(Math.max(contextRetrievalCount, 1), 10);
-      const validatedThreshold = Math.min(Math.max(matchThreshold, 0.5), 0.9);
+      const validatedThreshold = Math.min(Math.max(matchThreshold, 0.3), 0.9); // Lowered min from 0.5
 
       logger.debug("Context search with configurable parameters", {
         websiteUrl,
@@ -75,36 +75,166 @@ export class AIAgentService {
         fromSettings: !!settings,
       });
 
+      // ✅ STEP 1: Generate embedding for the user's query
       const queryEmbedding = await openai.embeddings.create({
         model: config.openai.embeddingModel,
         input: query,
       });
 
       const embeddingVector = queryEmbedding.data[0].embedding;
-      const embeddingString = `[${embeddingVector.join(",")}]`;
+      const embeddingString = JSON.stringify(embeddingVector);
 
-      const { data, error } = await supabase.rpc("match_website_content", {
-        query_embedding: embeddingString,
-        match_threshold: validatedThreshold,
-        match_count: validatedCount,
-        website_url_filter: websiteUrl,
+      logger.debug("Calling match_website_content RPC", {
+        embeddingLength: embeddingVector.length,
+        stringLength: embeddingString.length,
       });
 
-      if (error) {
-        logger.error("Error searching context", { error, websiteUrl });
+      // ✅ CRITICAL FIX: Try multiple URL variations to handle trailing slash inconsistencies
+      const urlVariations = [
+        websiteUrl, // Original URL
+        websiteUrl.endsWith("/") ? websiteUrl.slice(0, -1) : websiteUrl + "/", // Toggle trailing slash
+      ];
+
+      let data = null;
+      let error = null;
+      let matchedUrl = null;
+
+      // Try each URL variation
+      for (const urlVariant of urlVariations) {
+        const result = await supabase.rpc("match_website_content", {
+          query_embedding: embeddingString,
+          match_threshold: validatedThreshold,
+          match_count: validatedCount,
+          website_url_filter: urlVariant,
+        });
+
+        if (result.error) {
+          error = result.error;
+          continue;
+        }
+
+        if (result.data && result.data.length > 0) {
+          data = result.data;
+          matchedUrl = urlVariant;
+          logger.debug("✅ Found results with URL variant", {
+            originalUrl: websiteUrl,
+            matchedUrl: urlVariant,
+            count: data.length,
+          });
+          break;
+        }
+      }
+
+      // Handle errors
+      if (error && !data) {
+        logger.error("Error searching context", {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          websiteUrl,
+          triedUrls: urlVariations,
+        });
+
+        if (error.message?.includes("function match_website_content")) {
+          logger.error(
+            "❌ RPC function 'match_website_content' not found in database!"
+          );
+          logger.error(
+            "📝 Run the migration: supabase/migrations/vector_search_function.sql"
+          );
+        }
+
+        if (error.message?.includes("malformed")) {
+          logger.error(
+            "❌ Malformed vector format - check embedding dimensions"
+          );
+          logger.error(`   Expected: 1536, Got: ${embeddingVector.length}`);
+        }
+
         return [];
       }
 
-      const results = data?.map((item: any) => item.content_section) || [];
+      // Check if we got results
+      if (!data || data.length === 0) {
+        logger.warn("No matching content found", {
+          websiteUrl,
+          triedUrls: urlVariations,
+          query: query.substring(0, 50),
+          threshold: validatedThreshold,
+        });
+
+        // ✅ DIAGNOSTIC: Check if embeddings exist at all
+        const { data: checkData, error: checkError } = await supabase
+          .from("website_embeddings")
+          .select("website_url")
+          .or(urlVariations.map((url) => `website_url.eq.${url}`).join(","))
+          .limit(1);
+
+        if (checkError) {
+          logger.error("Error checking for embeddings", { error: checkError });
+        } else if (!checkData || checkData.length === 0) {
+          logger.error("❌ NO EMBEDDINGS FOUND in database!", {
+            searchedUrls: urlVariations,
+            recommendation: "Run website ingestion: trigger ingest-website job",
+          });
+        } else {
+          logger.warn("⚠️  Embeddings exist but similarity scores too low", {
+            threshold: validatedThreshold,
+            embeddingsFound: checkData.length,
+            recommendation:
+              "Try lowering matchThreshold in agent settings (current: " +
+              validatedThreshold +
+              ")",
+          });
+        }
+
+        return [];
+      }
+
+      const results = data.map((item: any) => item.content_section) || [];
 
       logger.debug("Context search completed", {
         resultsCount: results.length,
         requestedCount: validatedCount,
+        matchedUrl,
+        similarities: data
+          .map((d: any) => d.similarity?.toFixed(3) || "N/A")
+          .slice(0, 3),
       });
+
+      // ✅ Enhanced success logging
+      if (results.length > 0) {
+        const avgSimilarity = (
+          data.reduce((sum: number, d: any) => sum + (d.similarity || 0), 0) /
+          data.length
+        ).toFixed(3);
+        const topSimilarity = data[0]?.similarity?.toFixed(3) || "N/A";
+
+        logger.info("✅ Retrieved relevant context", {
+          chunks: results.length,
+          avgSimilarity,
+          topSimilarity,
+          matchedUrl,
+          urlMismatch: matchedUrl !== websiteUrl,
+        });
+
+        // Warn if URL normalization was needed
+        if (matchedUrl !== websiteUrl) {
+          logger.warn("⚠️  URL mismatch detected!", {
+            agentUrl: websiteUrl,
+            databaseUrl: matchedUrl,
+            recommendation: "Normalize URLs during ingestion to avoid this",
+          });
+        }
+      }
 
       return results;
     } catch (error) {
-      logger.error("Error in searchContext", { error });
+      logger.error("Error in searchContext", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return [];
     }
   }
