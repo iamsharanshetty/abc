@@ -157,7 +157,7 @@ export class ContentParser {
     for (const selector of this.CONTENT_SELECTORS) {
       const content = $(selector).first().text();
       // ✅ FIXED: Lower threshold to capture more content (was 200)
-      if (content && content.trim().length > 100) {
+      if (content && content.trim().length > 50) {
         console.log(`    ✓ Found content using selector: ${selector}`);
         return content;
       }
@@ -419,7 +419,7 @@ export class ContentParser {
 
     // Has sufficient content (max 30 points)
     // Has sufficient content (max 30 points)
-    if (content.metadata.wordCount >= 50) {
+    if (content.metadata.wordCount >= 30) {
       // Changed from 100
       score += 15;
     }

@@ -120,12 +120,7 @@ export function ChatWidget({
       const decoder = new TextDecoder();
       let assistantMessage = "";
       const assistantMessageId = `${conversationId}_${Date.now()}_assistant`;
-
-      // Add empty assistant message
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
-      ]);
+      let isFirstToken = true;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -140,15 +135,32 @@ export function ChatWidget({
               const data = JSON.parse(line.slice(6));
 
               if (data.type === "token") {
-                assistantMessage += data.token;
-                // Update assistant message
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: assistantMessage }
-                      : msg
-                  )
-                );
+                // CRITICAL FIX: On first token, hide loading and add assistant message in ONE update
+                if (isFirstToken) {
+                  isFirstToken = false;
+                  setIsLoading(false); // Hide loading dots immediately
+                  assistantMessage = data.token;
+
+                  // Add assistant message with first token
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: assistantMessageId,
+                      role: "assistant",
+                      content: assistantMessage,
+                    },
+                  ]);
+                } else {
+                  // Subsequent tokens: just update the content
+                  assistantMessage += data.token;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: assistantMessage }
+                        : msg
+                    )
+                  );
+                }
               } else if (data.type === "done") {
                 // Final message
                 setMessages((prev) =>
@@ -261,11 +273,12 @@ export function ChatWidget({
                 )}
                 style={m.role === "user" ? bgPrimary : {}}
               >
-                {m.content || <span className="opacity-50">...</span>}
+                {m.content}
               </div>
             </div>
           ))}
 
+          {/* CRITICAL FIX: Only show loading dots when isLoading is true */}
           {isLoading && (
             <div className="flex w-full justify-start">
               <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm border border-slate-200 dark:border-slate-700 flex gap-1">

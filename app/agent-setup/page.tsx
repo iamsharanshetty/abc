@@ -97,7 +97,7 @@ export default function AgentSetupPage() {
 
           // Job completed
           if (status === "completed") {
-            console.log("✅ Job completed!", jobResult);
+            console.log(" Job completed!", jobResult);
 
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
@@ -248,7 +248,7 @@ export default function AgentSetupPage() {
         throw new Error("Agent created but no ID was returned");
       }
 
-      console.log("✅ Agent created:", result.agentId);
+      console.log(" Agent created:", result.agentId);
       setGeneratedAgentId(result.agentId);
       setLoading(false);
       setStep(3); // Move to success screen
@@ -440,7 +440,7 @@ export default function AgentSetupPage() {
                   </CardDescription>
                   {analysisResult && (
                     <div className="mt-4 text-sm text-muted-foreground">
-                      ✅ Analyzed{" "}
+                      Analyzed{" "}
                       {analysisResult.pagesProcessed ||
                         analysisResult.pagesScraped}{" "}
                       pages successfully

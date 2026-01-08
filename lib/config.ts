@@ -1,11 +1,11 @@
 // lib/config.ts
-//  SAFE: This file can be imported anywhere (client or server)
-//  DO NOT add any secrets here!
+// ✅ SAFE: This file can be imported anywhere (client or server)
+// ❌ DO NOT add any secrets here!
 
 import { z } from "zod";
 
 const envSchema = z.object({
-  // REMOVED: OPENAI_API_KEY - moved to config.server.ts
+  // ✅ REMOVED: OPENAI_API_KEY - moved to config.server.ts
 
   // Public Supabase credentials (safe to expose)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL"),
@@ -20,7 +20,7 @@ const envSchema = z.object({
     .default("development"),
   MAX_REQUESTS_PER_MINUTE: z.string().optional().default("50"),
   REQUEST_WINDOW_MS: z.string().optional().default("60000"),
-  MAX_PAGES_TO_SCRAPE: z.string().optional().default("50"),
+  MAX_PAGES_TO_SCRAPE: z.string().optional().default("30"),
   MIN_QUALITY_SCORE: z.string().optional().default("20"),
   CHUNK_SIZE: z.string().optional().default("1000"),
   CHUNK_OVERLAP: z.string().optional().default("200"),
@@ -29,7 +29,7 @@ const envSchema = z.object({
 function validateEnv() {
   try {
     return envSchema.parse({
-      //  REMOVED: OPENAI_API_KEY validation
+      // ✅ REMOVED: OPENAI_API_KEY validation
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       LOG_LEVEL: process.env.LOG_LEVEL,
@@ -54,8 +54,8 @@ function validateEnv() {
 const env = validateEnv();
 
 export const config = {
-  //  OpenAI settings (non-secret)
-  //  NO API KEY HERE - it's in config.server.ts
+  // ✅ OpenAI settings (non-secret)
+  // ❌ NO API KEY HERE - it's in config.server.ts
   openai: {
     embeddingModel: "text-embedding-3-small" as const,
     maxTokens: 8191,
@@ -71,7 +71,7 @@ export const config = {
   },
 
   ingestion: {
-    maxPages: parseInt(env.MAX_PAGES_TO_SCRAPE || "50"),
+    maxPages: parseInt(env.MAX_PAGES_TO_SCRAPE || "30"),
     maxContentLength: 8000,
     chunkSize: parseInt(env.CHUNK_SIZE || "1000"),
     chunkOverlap: parseInt(env.CHUNK_OVERLAP || "200"),
