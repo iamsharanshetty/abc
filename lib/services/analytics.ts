@@ -1,5 +1,5 @@
 
-import { createClient } from "../supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { Database } from "../database.types";
 import { logger } from "@/lib/utils/logger";
 
@@ -20,7 +20,11 @@ export class AnalyticsService {
         }
     ) {
         try {
-            const supabase = await createClient();
+            // Use service role key to bypass RLS policies for analytics
+            const supabase = createClient<Database>(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!
+            );
 
             // Sanitize metadata to ensure no PII is accidentally logged without consent
             // (This is a basic implementation, customize as needed)
@@ -35,7 +39,7 @@ export class AnalyticsService {
                 metadata: sanitizedMetadata,
             };
 
-            const { error } = await supabase.from("analytics_events").insert(event);
+            const { error } = await supabase.from("analytics_events").insert(event as any);
 
             if (error) {
                 logger.error("Failed to log analytics event", { error, event });

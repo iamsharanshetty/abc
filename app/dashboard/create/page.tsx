@@ -208,7 +208,7 @@ function CreateAgentPageContent() {
           url: url,
           useBrowser: true,
           forceRefresh: true,
-          maxPages: 50,
+          maxPages: 5, // Reduced from 50 to 5 for faster generation
         }),
       });
 
@@ -473,7 +473,35 @@ function CreateAgentPageContent() {
                   <p className="text-sm text-muted-foreground">Your agent is live in sandbox mode. You can now customize its behavior, add more knowledge, or integrate it into your site.</p>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <Button className="w-full h-11 bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20">
+                  <Button
+                    className="w-full h-11 bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20"
+                    disabled={isLoading}
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const { createAgentJson } = await import("@/lib/actions/agents");
+                        const res = await createAgentJson({
+                          name: `Agent for ${url.replace(/^https?:\/\//, '').split('/')[0]}`,
+                          url: url,
+                          role: selectedRole,
+                          tone: "helpful", // default
+                        });
+
+                        if (res.success && res.agentId) {
+                          // Redirect to agent config
+                          window.location.href = `/dashboard/agent/${res.agentId}`;
+                        } else {
+                          setError(res.error || "Failed to create agent");
+                          setIsLoading(false);
+                        }
+                      } catch (e) {
+                        console.error(e);
+                        setError("Failed to save agent");
+                        setIsLoading(false);
+                      }
+                    }}
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                     Configure Agent <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                   <Button variant="outline" className="w-full h-11" onClick={() => {

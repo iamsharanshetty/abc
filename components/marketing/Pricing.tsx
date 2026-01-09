@@ -1,12 +1,55 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Info } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 export function Pricing() {
     const [isAnnual, setIsAnnual] = useState(true);
+    const [user, setUser] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
+
+    useEffect(() => {
+        const checkUser = async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            setUser(user);
+            setLoading(false);
+        };
+        checkUser();
+    }, []);
+
+    const handleCheckout = async (priceId: string) => {
+        if (!user) {
+            // If not logged in, redirect to register
+            router.push('/register');
+            return;
+        }
+
+        if (!priceId) {
+            console.error("Price ID is missing");
+            return;
+        }
+        try {
+            const response = await fetch('/api/stripe/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ priceId }),
+            });
+            const data = await response.json();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                console.error("Checkout failed:", data.error);
+            }
+        } catch (error) {
+            console.error("Error redirecting to checkout:", error);
+        }
+    };
 
     const plans = [
         {
@@ -15,6 +58,7 @@ export function Pricing() {
             price: isAnnual ? "39" : "49",
             period: "/ month",
             billingNote: isAnnual ? "billed annually" : "billed monthly",
+            priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_STARTER,
             features: [
                 "1 website",
                 "Up to 2,000 AI Conversations / month",
@@ -26,7 +70,7 @@ export function Pricing() {
                 "1 Team User",
                 "Email support"
             ],
-            cta: "Start Free Trial",
+            cta: user ? "Upgrade to Starter" : "Start Free Trial",
             popular: false
         },
         {
@@ -35,6 +79,7 @@ export function Pricing() {
             price: isAnnual ? "119" : "149",
             period: "/ month",
             billingNote: isAnnual ? "billed annually" : "billed monthly",
+            priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_GROWTH,
             features: [
                 "1 website",
                 "Up to 8,000 AI Conversations / month",
@@ -46,7 +91,7 @@ export function Pricing() {
                 "Up to 3 Team Users",
                 "Priority support"
             ],
-            cta: "Start Free Trial",
+            cta: user ? "Upgrade to Growth" : "Start Free Trial",
             popular: true
         },
         {
@@ -55,6 +100,7 @@ export function Pricing() {
             price: isAnnual ? "319" : "399",
             period: "/ month",
             billingNote: isAnnual ? "billed annually" : "billed monthly",
+            priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_SCALE,
             features: [
                 "Up to 5 websites",
                 "Up to 30,000 AI Conversations / month",
@@ -66,7 +112,7 @@ export function Pricing() {
                 "Unlimited Users",
                 "Dedicated onboarding"
             ],
-            cta: "Request a Demo",
+            cta: user ? "Contact Sales" : "Request a Demo",
             popular: false
         },
         {
@@ -75,6 +121,7 @@ export function Pricing() {
             price: isAnnual ? "79" : "99",
             period: "/ month",
             billingNote: isAnnual ? "billed annually" : "billed monthly",
+            priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_EXISTING,
             features: [
                 "1 website",
                 "Usage-based AI Conversations",
@@ -86,10 +133,12 @@ export function Pricing() {
                 "Up to 3 Team Users",
                 "Priority support"
             ],
-            cta: "Learn More",
+            cta: user ? "Add WebRep" : "Learn More",
             popular: false
         }
     ];
+
+    if (loading) return null; // Or a spinner
 
     return (
         <section className="py-24 bg-slate-50 dark:bg-slate-950">
@@ -157,6 +206,7 @@ export function Pricing() {
                             <Button
                                 variant={plan.popular ? "default" : "outline"}
                                 className={`w-full ${plan.popular ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                                onClick={() => handleCheckout(plan.priceId || '')}
                             >
                                 {plan.cta}
                             </Button>

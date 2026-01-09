@@ -29,7 +29,6 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
         { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
         { name: "My Agents", href: "/dashboard/previous-agents", icon: Bot },
         { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
-        { name: "Conversations", href: "/dashboard/conversations", icon: MessageSquare }, // Added hypothetical route for better UX
         { name: "Integrations", href: "/dashboard/integrations", icon: Zap },
     ]
 

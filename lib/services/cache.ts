@@ -81,7 +81,7 @@ export class CacheService {
 
       return {
         websiteUrl,
-        lastScraped: data[0].created_at,
+        lastScraped: (data[0] as any).created_at,
         pagesCount: count || 0,
         status: "completed",
       };
@@ -152,7 +152,7 @@ export class CacheService {
         throw websitesError;
       }
 
-      const uniqueWebsites = new Set(websites?.map((w) => w.website_url) || []);
+      const uniqueWebsites = new Set(websites?.map((w: any) => w.website_url) || []);
 
       // Get total pages count
       const { count, error: countError } = await supabase

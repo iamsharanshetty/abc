@@ -21,6 +21,24 @@ export async function GET(
 
     logger.info("Fetching job status", { jobId });
 
+    // DEVELOPMENT BYPASS: Check for local dev job
+    if (jobId.startsWith("dev_job_")) {
+      const globalStore = (globalThis as any).__DEV_JOBS__ || {};
+      const localJob = globalStore[jobId];
+
+      if (!localJob) {
+        return NextResponse.json({
+          success: false,
+          error: { message: "Local Dev Job not found", code: "JOB_NOT_FOUND" },
+        }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: localJob
+      });
+    }
+
     // Retrieve the job run details
     const run = await runs.retrieve(jobId);
 
@@ -77,12 +95,12 @@ export async function GET(
         ...(status === "completed" && run.output && { result: run.output }),
         ...(status === "failed" &&
           run.error && {
-            error: {
-              message: run.error.message,
-              name: run.error.name,
-              stackTrace: run.error.stackTrace,
-            },
-          }),
+          error: {
+            message: run.error.message,
+            name: run.error.name,
+            stackTrace: run.error.stackTrace,
+          },
+        }),
       },
     };
 

@@ -138,8 +138,8 @@ export class EmbeddingService {
     return chunks.filter((chunk) => {
       const wordCount = chunk.split(/\s+/).length;
 
-      // Skip very short chunks (less than 20 words)
-      if (wordCount < 20) {
+      // Skip very short chunks (less than 5 words)
+      if (wordCount < 5) {
         return false;
       }
 
@@ -500,5 +500,46 @@ export class EmbeddingService {
     }
 
     return sections;
+  }
+
+  /**
+   * Find relevant content for a user query
+   */
+  async findRelevantContent(
+    query: string,
+    websiteUrl: string,
+    limit = 10,
+    similarityThreshold = 0.25
+  ): Promise<string> {
+    try {
+      if (!query || !websiteUrl) return "";
+
+      const queryEmbedding = await this.generateEmbedding(query);
+
+      const supabase = await createClient();
+
+      // RPC call to match_embeddings (must start with match_embeddings function in DB)
+      const { data: chunks, error } = await supabase.rpc("match_embeddings", {
+        query_embedding: `[${queryEmbedding.join(",")}]`,
+        match_threshold: similarityThreshold,
+        match_count: limit,
+        filter_url: websiteUrl,
+      });
+
+      if (error) {
+        console.error("Supabase vector search error:", error);
+        return "";
+      }
+
+      if (!chunks || chunks.length === 0) {
+        return "";
+      }
+
+      // Format the context
+      return chunks.map((chunk: any) => chunk.content).join("\n\n---\n\n");
+    } catch (error) {
+      console.error("Error finding relevant content:", error);
+      return "";
+    }
   }
 }

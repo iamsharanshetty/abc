@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 const ProfileSchema = z.object({
@@ -30,22 +31,27 @@ export async function saveOnboardingData(data: ProfileData) {
         throw new Error('Invalid data provided')
     }
 
-    // Update profile
+    // Upsert profile (create if missing)
     const { error } = await (supabase
         .from('profiles') as any)
-        .update({
+        .upsert({
+            id: user.id, // Required for upsert
+            email: user.email, // Good practice to ensure email is set
             domain_occupation: data.domain_occupation,
             project_idea: data.project_idea,
             referral_source: data.referral_source,
             onboarding_answers: data.onboarding_answers,
             updated_at: new Date().toISOString()
         })
-        .eq('id', user.id)
 
     if (error) {
         console.error('Error saving profile:', error)
-        throw new Error('Failed to save profile data')
+        throw new Error('Failed to save profile data: ' + error.message)
     }
 
+    console.log("Successfully updated profile for user:", user.id, "with data:", data);
+
+    revalidatePath('/', 'layout');
+    revalidatePath('/dashboard');
     return { success: true }
 }

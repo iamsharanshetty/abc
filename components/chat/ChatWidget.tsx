@@ -5,15 +5,35 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, X, MessageCircle, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface ChatWidgetProps {
+export interface ChatWidgetProps {
     agentId?: string;
     websiteUrl?: string;
     primaryColor?: string;
     title?: string;
+    isOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
-export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', title = 'WebRep AI' }: ChatWidgetProps) {
-    const [isOpen, setIsOpen] = useState(false);
+export function ChatWidget({
+    agentId,
+    websiteUrl,
+    primaryColor = '#2563eb',
+    title = 'WebRep AI',
+    isOpen: controlledOpen,
+    onOpenChange
+}: ChatWidgetProps) {
+    const [localOpen, setLocalOpen] = useState(false);
+
+    // Determine effective state (controlled vs local)
+    const isControlled = controlledOpen !== undefined;
+    const isOpen = isControlled ? controlledOpen : localOpen;
+
+    const setIsOpen = (newOpen: boolean) => {
+        if (!isControlled) {
+            setLocalOpen(newOpen);
+        }
+        onOpenChange?.(newOpen);
+    };
 
     // Using simple local state to ensure input works regardless of hook quirks
     const [localInput, setLocalInput] = useState('');
@@ -21,8 +41,8 @@ export function ChatWidget({ agentId, websiteUrl, primaryColor = '#2563eb', titl
     const chatHelpers = useChat({
         api: '/api/chat',
         body: {
-            agentId,
-            websiteUrl
+            agentId: agentId,
+            websiteUrl: websiteUrl
         },
         onError: (err: any) => {
             console.error("Chat error:", err);

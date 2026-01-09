@@ -1,13 +1,12 @@
-"use client";
 
+import { getAnalyticsEvents } from "@/lib/actions/agents";
 import { Button } from "@/components/ui/Button";
-import { ChevronDown, Calendar, BarChart3 } from "lucide-react";
-import { MetricCard } from "@/components/analytics/MetricCard";
-import { AnalyticsChart } from "@/components/analytics/AnalyticsChart";
-import { AgentSummaryCard } from "@/components/analytics/AgentSummaryCard";
-import { AgentInsightsCard } from "@/components/analytics/AgentInsightsCard";
+import { ChevronDown, Calendar } from "lucide-react";
+import RealtimeAnalyticsBoard from "@/components/analytics/RealtimeAnalyticsBoard";
 
-export default function AnalyticsPage() {
+export default async function AnalyticsPage() {
+    const initialEvents = await getAnalyticsEvents();
+
     return (
         <div className="space-y-8 pt-2 pb-10 animate-in fade-in duration-500">
             {/* Header Controls */}
@@ -29,47 +28,7 @@ export default function AnalyticsPage() {
                 </div>
             </div>
 
-            {/* Metric Cards Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard
-                    title="Total Conversations"
-                    value="12,480"
-                    trend="+12%"
-                    subLabel="vs Last Period"
-                    trendDirection="up"
-                />
-                <MetricCard
-                    title="Avg Response Time"
-                    value="1.4s"
-                    trend="-8%"
-                    subLabel="improvement"
-                    trendDirection="down" // Down is good for time
-                />
-                <MetricCard
-                    title="Engagement Rate"
-                    value="68%"
-                    trend="+3%"
-                    trendDirection="up"
-                />
-                <MetricCard
-                    title="Lead Captures"
-                    value="320"
-                    trend="+5%"
-                    trendDirection="up"
-                />
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <AnalyticsChart title="Conversation Volume" />
-                <AnalyticsChart title="Traffic Distribution" />
-            </div>
-
-            {/* Bottom Detail Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <AgentSummaryCard />
-                <AgentInsightsCard />
-            </div>
+            <RealtimeAnalyticsBoard initialEvents={initialEvents as any[]} />
         </div>
     );
 }

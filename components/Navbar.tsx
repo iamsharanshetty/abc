@@ -8,16 +8,40 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { createClient } from "@/lib/supabase/client"
+import { UserNav } from "@/components/dashboard/UserNav"
 
 export function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = React.useState(false)
     const [scrolled, setScrolled] = React.useState(false)
+    const [user, setUser] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
         const handleScroll = () => {
             setScrolled(window.scrollY > 20)
         }
         window.addEventListener("scroll", handleScroll)
+
+        const checkUser = async () => {
+            try {
+                const supabase = createClient()
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    setUser({
+                        email: user.email,
+                        full_name: user.user_metadata?.full_name,
+                        avatar_url: user.user_metadata?.avatar_url
+                    })
+                }
+            } catch (e) {
+                console.error(e)
+            } finally {
+                setLoading(false)
+            }
+        }
+        checkUser()
+
         return () => window.removeEventListener("scroll", handleScroll)
     }, [])
 
@@ -65,16 +89,31 @@ export function Navbar() {
                         <div className="hidden md:flex items-center gap-4">
                             <ThemeToggle />
                             <div className="w-px h-4 bg-border" />
-                            <Link href="/login">
-                                <Button variant="ghost" size="sm" className="font-medium">
-                                    Log in
-                                </Button>
-                            </Link>
-                            <Link href="/login">
-                                <Button size="sm" className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
-                                    Start Free
-                                </Button>
-                            </Link>
+                            {loading ? (
+                                <div className="h-9 w-20 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-md" />
+                            ) : user ? (
+                                <div className="flex items-center gap-4">
+                                    <Link href="/dashboard">
+                                        <Button variant="ghost" size="sm" className="font-medium">
+                                            Dashboard
+                                        </Button>
+                                    </Link>
+                                    <UserNav user={user} />
+                                </div>
+                            ) : (
+                                <>
+                                    <Link href="/login">
+                                        <Button variant="ghost" size="sm" className="font-medium">
+                                            Log in
+                                        </Button>
+                                    </Link>
+                                    <Link href="/login">
+                                        <Button size="sm" className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
+                                            Start Free
+                                        </Button>
+                                    </Link>
+                                </>
+                            )}
                         </div>
 
                         {/* Mobile Toggle */}

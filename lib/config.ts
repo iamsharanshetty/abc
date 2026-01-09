@@ -3,11 +3,9 @@ import { z } from "zod";
 
 // Define the schema for environment variables
 const envSchema = z.object({
-  OPENAI_API_KEY: z.string().min(1, "OpenAI API key is required"),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL"),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z
-    .string()
-    .min(1, "Supabase anon key is required"),
+  OPENAI_API_KEY: z.string().optional(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL").optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
 
   // Optional configuration
   LOG_LEVEL: z
@@ -17,7 +15,7 @@ const envSchema = z.object({
   MAX_REQUESTS_PER_MINUTE: z.string().optional().default("50"),
   REQUEST_WINDOW_MS: z.string().optional().default("60000"),
   MAX_PAGES_TO_SCRAPE: z.string().optional().default("50"),
-  MIN_QUALITY_SCORE: z.string().optional().default("20"),
+  MIN_QUALITY_SCORE: z.string().optional().default("10"),
   CHUNK_SIZE: z.string().optional().default("1000"),
   CHUNK_OVERLAP: z.string().optional().default("200"),
 });

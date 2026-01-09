@@ -7,6 +7,7 @@ import { UserNav } from "@/components/dashboard/UserNav"
 import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { TeamSwitcher } from "@/components/dashboard/TeamSwitcher"
 
 export default async function DashboardLayout({
     children,
@@ -65,10 +66,7 @@ export default async function DashboardLayout({
                     <div className="flex items-center gap-4 ml-auto">
                         <ThemeToggle />
 
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-card border border-border/50 rounded-lg cursor-pointer hover:bg-secondary/50 transition-colors">
-                            <span className="text-sm font-medium text-foreground">Acme Inc.</span>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        </div>
+                        <TeamSwitcher />
 
                         {/* Profile Dropdown */}
                         <UserNav user={{

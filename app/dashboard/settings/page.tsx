@@ -1,11 +1,10 @@
-"use client";
 
-import { OrgInfoCard } from "@/components/settings/OrgInfoCard";
-import { AllowedDomainsCard } from "@/components/settings/AllowedDomainsCard";
-import { DefaultAgentSettingsCard } from "@/components/settings/DefaultAgentSettingsCard";
-import { SecurityAccessCard } from "@/components/settings/SecurityAccessCard";
+import { getProfile } from "@/lib/actions/agents";
+import RealtimeSettings from "@/components/settings/RealtimeSettings";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+    const profile = await getProfile();
+
     return (
         <div className="space-y-8 pt-2 pb-10 max-w-5xl animate-in fade-in duration-500">
             <div>
@@ -13,15 +12,7 @@ export default function SettingsPage() {
                 <p className="text-muted-foreground mt-1">Manage global settings for your organization and agents.</p>
             </div>
 
-            <div className="space-y-6">
-                <OrgInfoCard />
-
-                <AllowedDomainsCard />
-
-                <DefaultAgentSettingsCard />
-
-                <SecurityAccessCard />
-            </div>
+            <RealtimeSettings initialProfile={profile} />
         </div>
     );
 }

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { createClient } from "@/lib/supabase/server";
-import type { ingestWebsiteTask } from "@/jobs/ingest-website";
+import { ingestWebsiteTask, ingestWebsiteHandler } from "@/jobs/ingest-website";
 import {
   validateAndSanitizeUrl,
   validateMaxPages,
@@ -48,16 +48,75 @@ export async function POST(request: NextRequest) {
     // Trigger the background job
     let handle;
     try {
-      handle = await tasks.trigger<typeof ingestWebsiteTask>(
-        "ingest-website",
-        {
-          url,
-          maxPages,
-          useBrowser,
-          forceRefresh,
-          userId: user?.id,
-        }
-      );
+      // DEVELOPMENT BYPASS: Run directly if in dev mode
+      if (process.env.NODE_ENV === "development") {
+        logger.info("⚠️ DEV MODE: Running ingestion directly (skipping Trigger.dev queue)");
+
+        const mockId = `dev_job_${Date.now()}`;
+        const globalStore = (globalThis as any).__DEV_JOBS__ = (globalThis as any).__DEV_JOBS__ || {};
+
+        // Initialize job status
+        globalStore[mockId] = {
+          jobId: mockId,
+          status: "running",
+          progress: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        // Run async
+        (async () => {
+          try {
+            logger.info("Starting direct execution...");
+            const result = await ingestWebsiteHandler({
+              url,
+              maxPages,
+              useBrowser,
+              forceRefresh,
+              userId: user?.id,
+            }, {} as any);
+
+            logger.info("Direct execution completed.");
+            globalStore[mockId] = {
+              ...globalStore[mockId],
+              status: "completed",
+              progress: 100,
+              updatedAt: new Date(),
+              finishedAt: new Date(),
+              result: result, // Store the actual result
+              output: result // Map to 'output' as expected by the status route
+            };
+          } catch (e) {
+            logger.error("Direct execution failed", { error: e });
+            globalStore[mockId] = {
+              ...globalStore[mockId],
+              status: "failed",
+              progress: 0,
+              updatedAt: new Date(),
+              finishedAt: new Date(),
+              error: {
+                message: e instanceof Error ? e.message : "Unknown error",
+                name: "JobError"
+              }
+            };
+          }
+        })();
+
+        // Return the mock handle
+        handle = { id: mockId };
+      } else {
+        // Standard Production Trigger
+        handle = await tasks.trigger<typeof ingestWebsiteTask>(
+          "ingest-website",
+          {
+            url,
+            maxPages,
+            useBrowser,
+            forceRefresh,
+            userId: user?.id,
+          }
+        );
+      }
     } catch (e) {
       logger.error("Failed to trigger task", { error: e });
       throw new Error(`Failed to trigger background job: ${e instanceof Error ? e.message : 'Unknown error'}`);
