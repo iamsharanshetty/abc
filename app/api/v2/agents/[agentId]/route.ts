@@ -23,7 +23,7 @@ export async function GET(
     // ✅ FIXED: Query the actual database
     // Try authenticated access first, fall back to service client for public access
     let agent = null;
-    let supabase = await createClient();
+    const supabase = await createClient();
 
     const {
       data: { user },
