@@ -178,9 +178,15 @@ export async function getAgentStats() {
     // Calculate stats
     const stats = {
       total: agents?.length || 0,
-      active: agents?.filter((a) => a.status === "active").length || 0,
-      inactive: agents?.filter((a) => a.status === "inactive").length || 0,
-      training: agents?.filter((a) => a.status === "training").length || 0,
+      active:
+        agents?.filter((a: Pick<AgentRow, "status">) => a.status === "active")
+          .length || 0,
+      inactive:
+        agents?.filter((a: Pick<AgentRow, "status">) => a.status === "inactive")
+          .length || 0,
+      training:
+        agents?.filter((a: Pick<AgentRow, "status">) => a.status === "training")
+          .length || 0,
     };
 
     return stats;

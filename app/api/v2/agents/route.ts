@@ -4,6 +4,10 @@ import { handleError } from "@/lib/errors/errorHandler";
 import { logger } from "@/lib/utils/logger";
 import { ValidationError } from "@/lib/errors/AppError";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/database.types";
+
+// Type helper for agents table
+type AgentRow = Database["public"]["Tables"]["agents"]["Row"];
 
 // GET /api/v2/agents - List all agents
 export async function GET(request: NextRequest) {
@@ -35,8 +39,8 @@ export async function GET(request: NextRequest) {
       throw new Error(`Database error: ${error.message}`);
     }
 
-    // Format response to match the expected structure
-    const formattedAgents = (agents || []).map((agent) => ({
+    // ✅ FIXED: Add proper type annotation to map function
+    const formattedAgents = (agents || []).map((agent: AgentRow) => ({
       id: agent.id,
       name: agent.name,
       websiteUrl: agent.website_url,

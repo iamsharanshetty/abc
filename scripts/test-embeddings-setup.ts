@@ -49,7 +49,7 @@ async function testDatabaseSetup() {
         error.message.includes("does not exist")
       ) {
         console.error("   ❌ Function doesn't exist!");
-        console.error("   You need to run: vector_search_functions.sql");
+        console.error("   You need to run: vector_search_function.sql");
         allPassed = false;
       } else {
         // Function exists but returned error (that's OK for test)
@@ -63,18 +63,16 @@ async function testDatabaseSetup() {
     allPassed = false;
   }
 
-  // Test 3: Check if match_website_embeddings function exists
-  console.log(
-    "\n3️⃣  Checking if match_website_embeddings() function exists..."
-  );
+  // Test 3: Check if match_documents function exists
+  console.log("\n3️⃣  Checking if match_documents() function exists...");
   try {
-    // For this function, we need to pass a vector type, not a string
-    // So we'll just check via a different method
-    const { data, error } = await supabase.rpc("match_website_embeddings", {
-      query_embedding: "[0.1]", // This will fail, but tells us if function exists
+    const testEmbedding = JSON.stringify(Array(1536).fill(0));
+
+    const { error } = await supabase.rpc("match_documents", {
+      query_embedding: testEmbedding,
       match_threshold: 0.5,
       match_count: 1,
-      website_url: "https://test.com",
+      filter_website_url: "https://test.com",
     });
 
     if (error) {
@@ -83,7 +81,7 @@ async function testDatabaseSetup() {
         error.message.includes("does not exist")
       ) {
         console.error("   ❌ Function doesn't exist!");
-        console.error("   You need to run: vector_search_functions.sql");
+        console.error("   You need to run: create_chat_logs.sql");
         allPassed = false;
       } else {
         // Function exists (error is due to our test data)
@@ -110,7 +108,7 @@ async function testDatabaseSetup() {
         error.message.includes("does not exist")
       ) {
         console.error("   ❌ Function doesn't exist!");
-        console.error("   You need to run: vector_search_functions.sql");
+        console.error("   You need to run: add_check_embeddings_exist.sql");
         allPassed = false;
       } else {
         console.log("   ✅ Function exists");
@@ -144,7 +142,9 @@ async function testDatabaseSetup() {
         console.log(`   ✅ Found ${count} embeddings`);
 
         // Show unique websites
-        const uniqueWebsites = new Set(data?.map((d) => d.website_url) || []);
+        const uniqueWebsites = new Set(
+          data?.map((d: { website_url: string }) => d.website_url) || []
+        );
         console.log(`   Websites in database:`);
         uniqueWebsites.forEach((url) => {
           console.log(`      - ${url}`);
@@ -156,27 +156,52 @@ async function testDatabaseSetup() {
     allPassed = false;
   }
 
-  // Test 6: Check vector extension
-  console.log("\n6️⃣  Checking if pgvector extension is enabled...");
+  // Test 6: Check embedding column structure
+  console.log("\n6️⃣  Checking embedding column structure...");
   try {
     const { data, error } = await supabase
-      .from("pg_extension")
-      .select("extname")
-      .eq("extname", "vector");
+      .from("website_embeddings")
+      .select("embedding")
+      .limit(1)
+      .single();
 
-    if (error) {
-      console.error(
-        "   ⚠️  Cannot check extensions (this is OK in production)"
-      );
-    } else if (data && data.length > 0) {
-      console.log("   ✅ pgvector extension is enabled");
-    } else {
-      console.error("   ❌ pgvector extension not found");
-      console.error("   Run: CREATE EXTENSION vector;");
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 is "no rows returned" which is OK
+      console.error("   ❌ Error:", error.message);
       allPassed = false;
+    } else if (data) {
+      console.log("   ✅ Embedding column exists and has data");
+    } else {
+      console.log("   ✅ Embedding column exists (no data yet)");
     }
   } catch (error: any) {
-    console.log("   ⚠️  Cannot verify extension status");
+    console.error("   ❌ Error:", error.message);
+    allPassed = false;
+  }
+
+  // Test 7: Check agent helper functions
+  console.log("\n7️⃣  Checking agent helper functions...");
+  try {
+    const { error } = await supabase.rpc("get_agent_stats", {
+      p_agent_id: "test-agent-id",
+    });
+
+    if (error) {
+      if (
+        error.message.includes("function") &&
+        error.message.includes("does not exist")
+      ) {
+        console.error("   ❌ get_agent_stats function doesn't exist!");
+        allPassed = false;
+      } else {
+        console.log("   ✅ Agent helper functions exist");
+      }
+    } else {
+      console.log("   ✅ Agent helper functions exist and work");
+    }
+  } catch (error: any) {
+    console.error("   ❌ Error:", error.message);
+    allPassed = false;
   }
 
   // Summary
@@ -186,15 +211,17 @@ async function testDatabaseSetup() {
   if (allPassed) {
     console.log("✅ All tests passed! Your database is properly configured.");
     console.log("\nNext steps:");
-    console.log("1. Ingest a website: POST /api/v2/ingest");
+    console.log("1. Ingest a website: POST /api/ingest");
     console.log("2. Test chat: POST /api/v2/chat");
     console.log("3. Debug: GET /api/debug/embeddings?url=YOUR_URL");
   } else {
     console.log("❌ Some tests failed. Please fix the issues above.");
-    console.log("\nMost likely fix:");
-    console.log("1. Run vector_search_functions.sql in Supabase SQL Editor");
-    console.log("2. Verify the table schema is correct");
-    console.log("3. Re-run this test script");
+    console.log("\nMost likely fixes:");
+    console.log("1. Run website_embeddings.sql in Supabase SQL Editor");
+    console.log("2. Run vector_search_function.sql in Supabase SQL Editor");
+    console.log("3. Run add_check_embeddings_exist.sql in Supabase SQL Editor");
+    console.log("4. Run agents_conversation_leads.sql for agent functions");
+    console.log("5. Re-run this test script");
   }
 
   console.log("\n" + "=".repeat(60) + "\n");

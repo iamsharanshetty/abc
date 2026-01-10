@@ -4,7 +4,8 @@ import { logger } from "@/lib/utils/logger";
 import { Database } from "@/lib/database.types";
 
 // ✅ Define proper types from Database schema
-type WebsiteEmbedding = Database["public"]["Tables"]["website_embeddings"]["Row"];
+type WebsiteEmbedding =
+  Database["public"]["Tables"]["website_embeddings"]["Row"];
 
 interface CacheEntry {
   websiteUrl: string;
@@ -324,7 +325,9 @@ export class CacheService {
         throw websitesError;
       }
 
-      const uniqueWebsites = new Set(websites?.map((w) => w.website_url) || []);
+      const uniqueWebsites = new Set(
+        websites?.map((w: { website_url: string }) => w.website_url) || []
+      );
 
       const { count, error: countError } = await supabase
         .from("website_embeddings")
