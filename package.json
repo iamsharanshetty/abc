@@ -1,4 +1,18 @@
 {
+  "name": "webrep",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "next lint",
+    "start": "next start",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "postinstall": "[ \"$VERCEL\" != \"1\" ] && puppeteer browsers install chrome || echo 'Skipping Puppeteer on Vercel'"
+  },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",
     "@ai-sdk/react": "^1.0.0",
@@ -69,18 +83,7 @@
     "vercel": "^50.1.2",
     "vitest": "^2.1.5"
   },
-  "name": "webrep",
-  "private": true,
-  "scripts": {
-    "build": "next build",
-    "dev": "next dev",
-    "lint": "next lint",
-    "start": "next start",
-    "test": "vitest",
-    "test:coverage": "vitest --coverage",
-    "test:run": "vitest run",
-    "test:ui": "vitest --ui",
-    "postinstall": "puppeteer browsers install chrome"
-  },
-  "version": "0.1.0"
+  "engines": {
+    "node": ">=18.17.0"
+  }
 }
