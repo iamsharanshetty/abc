@@ -5,22 +5,22 @@ export enum ErrorCode {
   INVALID_URL = 'INVALID_URL',
   INVALID_INPUT = 'INVALID_INPUT',
   MISSING_PARAMETER = 'MISSING_PARAMETER',
-  
+
   // Scraping Errors (500)
   SCRAPING_FAILED = 'SCRAPING_FAILED',
   PARSING_FAILED = 'PARSING_FAILED',
   NO_CONTENT_FOUND = 'NO_CONTENT_FOUND',
-  
+
   // Embedding Errors (500)
   EMBEDDING_GENERATION_FAILED = 'EMBEDDING_GENERATION_FAILED',
   EMBEDDING_STORAGE_FAILED = 'EMBEDDING_STORAGE_FAILED',
-  
+
   // Rate Limiting (429)
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
-  
+
   // Cache Errors (500)
   CACHE_ERROR = 'CACHE_ERROR',
-  
+
   // General Errors
   INTERNAL_ERROR = 'INTERNAL_ERROR',
   EXTERNAL_API_ERROR = 'EXTERNAL_API_ERROR',
@@ -40,16 +40,16 @@ export class AppError extends Error {
     context?: Record<string, any>
   ) {
     super(message);
-    
+
     this.code = code;
     this.statusCode = statusCode;
     this.isOperational = isOperational;
     this.context = context;
-    
+
     // Maintains proper stack trace
     Error.captureStackTrace(this, this.constructor);
-    
-    Object.setPrototypeOf(this, AppError.prototype);
+
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 
   toJSON() {

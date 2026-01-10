@@ -141,7 +141,10 @@ export function validateBoolean(
   }
 
   if (typeof value === "string") {
-    return value.toLowerCase() === "true";
+    const lower = value.toLowerCase();
+    if (lower === "true") return true;
+    if (lower === "false") return false;
+    return defaultValue;
   }
 
   return defaultValue;
