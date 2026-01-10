@@ -22,6 +22,7 @@
     "cheerio": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "framer-motion": "^11.11.17",
     "ioredis": "^5.8.2",

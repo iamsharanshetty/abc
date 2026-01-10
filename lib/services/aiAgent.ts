@@ -10,6 +10,7 @@ import { CacheService } from "./cache";
 import { LangChainService } from "./langchainService";
 import { CRMService } from "./crmService";
 import type { AgentSettings, LeadData } from "@/types/agent";
+import { AGENT_SETTINGS_DEFAULTS } from "@/types/agent";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 
 export interface AgentMessage {
@@ -52,80 +53,26 @@ export class AIAgentService {
   }
 
   /**
-<<<<<<< HEAD
-=======
-   * Expand and enhance query to improve semantic matching
-   * Helps with short or vague queries by adding context
+   * Expand query to improve matching
    */
   private expandQuery(query: string, websiteUrl: string): string {
-    const lowerQuery = query.toLowerCase().trim();
-    const wordCount = lowerQuery.split(/\s+/).filter(w => w.length > 0).length;
-    
-    // Extract domain/company name from URL
     try {
       const urlObj = new URL(websiteUrl);
       const domain = urlObj.hostname.replace("www.", "");
-      const companyName = domain.split(".")[0];
-      
-      // Common query patterns that need expansion (order matters - more specific first)
-      const expansions: Array<{ pattern: RegExp; expansion: string }> = [
-        // Client testimonials/feedback patterns
-        { pattern: /what.*your.*client/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
-        { pattern: /what.*client.*say/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
-        { pattern: /client.*say/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
-        { pattern: /testimonial/i, expansion: `client testimonials feedback reviews about ${companyName}` },
-        { pattern: /review/i, expansion: `client reviews testimonials feedback about ${companyName}` },
-        { pattern: /feedback/i, expansion: `client feedback testimonials reviews about ${companyName}` },
-        
-        // Services/products patterns
-        { pattern: /what.*service/i, expansion: `services products offerings from ${companyName}` },
-        { pattern: /your.*service/i, expansion: `services products offerings from ${companyName}` },
-        { pattern: /service.*offer/i, expansion: `services products offerings from ${companyName}` },
-        
-        // General company info patterns
-        { pattern: /what.*do.*you.*do/i, expansion: `what does ${companyName} do services products` },
-        { pattern: /who.*are.*you/i, expansion: `what is ${companyName} company services products` },
-        { pattern: /what.*is.*this/i, expansion: `what is ${companyName} company services` },
-      ];
-      
-      // Check for pattern matches
-      for (const { pattern, expansion } of expansions) {
-        if (pattern.test(lowerQuery)) {
-          const expanded = `${query} ${expansion}`;
-          logger.debug("Query expanded with pattern match", {
-            original: query.substring(0, 50),
-            expanded: expanded.substring(0, 100),
-            pattern: pattern.toString(),
-          });
-          return expanded;
-        }
+      const siteName = domain.split(".")[0];
+
+      if (query.toLowerCase().includes(siteName.toLowerCase())) {
+        return query;
       }
-      
-      // If query is very short (less than 15 chars or 3 words), add generic context
-      if (query.length < 15 || wordCount < 3) {
-        const expanded = `${query} ${companyName} information details`;
-        logger.debug("Query expanded for short query", {
-          original: query.substring(0, 50),
-          expanded: expanded.substring(0, 100),
-        });
-        return expanded;
-      }
-      
-      // If company name not in query and query is medium length, add company name
-      if (!lowerQuery.includes(companyName.toLowerCase()) && wordCount < 6) {
-        return `${query} ${companyName}`;
-      }
-    } catch (e) {
-      // If URL parsing fails, just return original query
-      logger.debug("Failed to parse URL for query expansion", { websiteUrl, error: e });
+
+      return `${query} [Context: ${siteName} website]`;
+    } catch {
+      return query;
     }
-    
-    return query;
   }
 
   /**
->>>>>>> chat-backup
-   * Search for relevant context from website embeddings
+   * Search for relevant context using vector embeddings
    */
   private async searchContext(
     websiteUrl: string,
@@ -133,18 +80,10 @@ export class AIAgentService {
     settings?: AgentSettings
   ): Promise<string[]> {
     try {
-      const supabase = await createClient();
-
-      const contextRetrievalCount = settings?.contextRetrievalCount || 5;
-<<<<<<< HEAD
-      const matchThreshold = settings?.matchThreshold || 0.7;
-
-      const validatedCount = Math.min(Math.max(contextRetrievalCount, 1), 10);
-      const validatedThreshold = Math.min(Math.max(matchThreshold, 0.5), 0.9);
-
-      logger.debug("Context search with configurable parameters", {
-        websiteUrl,
-=======
+      const supabase = createServiceClient();
+      const contextRetrievalCount =
+        settings?.contextRetrievalCount ||
+        AGENT_SETTINGS_DEFAULTS.contextRetrievalCount;
       const matchThreshold = settings?.matchThreshold || 0.3; // Lowered from 0.5
 
       const validatedCount = Math.min(Math.max(contextRetrievalCount, 1), 10);
@@ -157,35 +96,11 @@ export class AIAgentService {
         websiteUrl,
         originalQuery: query.substring(0, 50),
         expandedQuery: expandedQuery.substring(0, 100),
->>>>>>> chat-backup
         count: validatedCount,
         threshold: validatedThreshold,
         fromSettings: !!settings,
       });
 
-<<<<<<< HEAD
-      const queryEmbedding = await openai.embeddings.create({
-        model: config.openai.embeddingModel,
-        input: query,
-      });
-
-      const embeddingVector = queryEmbedding.data[0].embedding;
-      const embeddingString = `[${embeddingVector.join(",")}]`;
-
-      const { data, error } = await supabase.rpc("match_website_content", {
-        query_embedding: embeddingString,
-        match_threshold: validatedThreshold,
-        match_count: validatedCount,
-        website_url_filter: websiteUrl,
-      });
-
-      if (error) {
-        logger.error("Error searching context", { error, websiteUrl });
-        return [];
-      }
-
-      const results = data?.map((item: any) => item.content_section) || [];
-=======
       // ✅ STEP 1: Generate embedding for the expanded query
       const queryEmbedding = await openai.embeddings.create({
         model: config.openai.embeddingModel,
@@ -346,18 +261,10 @@ export class AIAgentService {
       }
 
       const results = data.map((item: any) => item.content_section) || [];
->>>>>>> chat-backup
 
       logger.debug("Context search completed", {
         resultsCount: results.length,
         requestedCount: validatedCount,
-<<<<<<< HEAD
-      });
-
-      return results;
-    } catch (error) {
-      logger.error("Error in searchContext", { error });
-=======
         matchedUrl,
         similarities: data
           .map((d: any) => d.similarity?.toFixed(3) || "N/A")
@@ -396,7 +303,6 @@ export class AIAgentService {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
->>>>>>> chat-backup
       return [];
     }
   }
@@ -1338,18 +1244,6 @@ Answer:`;
         responseLength: assistantResponse.length,
       });
 
-<<<<<<< HEAD
-      const { error } = await supabase.from("conversations").insert({
-        id: conversationId,
-        agent_id: agentId,
-        user_message: userMessage,
-        assistant_response: assistantResponse,
-        metadata: {
-          source: "public_chat",
-          timestamp: new Date().toISOString(),
-        },
-      });
-=======
       // Use UPSERT to handle both new conversations and updates to existing ones
       const { error } = await supabase
         .from("conversations")
@@ -1368,7 +1262,6 @@ Answer:`;
             onConflict: "id",
           }
         );
->>>>>>> chat-backup
 
       if (error) {
         logger.error("Error saving public conversation", {

@@ -1,16 +1,9 @@
 // lib/actions/user.ts - User Management Actions
 "use server";
 
-<<<<<<< HEAD
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
-import { z } from 'zod'
-=======
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/utils/logger";
 import { revalidatePath } from "next/cache";
->>>>>>> chat-backup
 
 /**
  * Save onboarding data for a user
@@ -43,31 +36,6 @@ export async function saveOnboardingData(data: {
       .eq("id", user.id)
       .single();
 
-<<<<<<< HEAD
-    // Upsert profile (create if missing)
-    const { error } = await (supabase
-        .from('profiles') as any)
-        .upsert({
-            id: user.id, // Required for upsert
-            email: user.email, // Good practice to ensure email is set
-            domain_occupation: data.domain_occupation,
-            project_idea: data.project_idea,
-            referral_source: data.referral_source,
-            onboarding_answers: data.onboarding_answers,
-            updated_at: new Date().toISOString()
-        })
-
-    if (error) {
-        console.error('Error saving profile:', error)
-        throw new Error('Failed to save profile data: ' + error.message)
-    }
-
-    console.log("Successfully updated profile for user:", user.id, "with data:", data);
-
-    revalidatePath('/', 'layout');
-    revalidatePath('/dashboard');
-    return { success: true }
-=======
     if (existingProfile) {
       // Update existing profile
       const { error } = await supabase
@@ -193,5 +161,4 @@ export async function updateUserProfile(updates: {
         error instanceof Error ? error.message : "Failed to update profile",
     };
   }
->>>>>>> chat-backup
 }

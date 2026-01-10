@@ -1,13 +1,7 @@
 {
   "dependencies": {
     "@ai-sdk/openai": "^2.0.88",
-<<<<<<< HEAD
-    "@langchain/community": "^1.1.0",
-    "@langchain/core": "^1.1.6",
-    "@langchain/openai": "^1.2.0",
-=======
     "@ai-sdk/react": "^2.0.117",
->>>>>>> origin/staging
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.8",
@@ -23,14 +17,7 @@
     "cheerio": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-<<<<<<< HEAD
-    "dotenv": "^17.2.3",
-    "ioredis": "^5.8.2",
-    "langchain": "^1.2.1",
-    "libphonenumber-js": "^1.12.33",
-=======
     "framer-motion": "^12.23.26",
->>>>>>> origin/staging
     "lucide-react": "^0.555.0",
     "next": "16.0.10",
     "next-themes": "^0.4.6",

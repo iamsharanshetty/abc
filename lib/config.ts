@@ -28,12 +28,7 @@ const envSchema = z.object({
 function validateEnv() {
   try {
     return envSchema.parse({
-<<<<<<< HEAD
-      OPENAI_API_KEY:
-        process.env.ALENTA_OPENAI_KEY || process.env.OPENAI_API_KEY,
-=======
       // ✅ REMOVED: OPENAI_API_KEY validation
->>>>>>> chat-backup
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       LOG_LEVEL: process.env.LOG_LEVEL,
@@ -94,14 +89,8 @@ export const config = {
     pageWaitTime: 2000,
     retryAttempts: 3,
   },
-<<<<<<< HEAD
-  // ✅ NEW: Intent detection configuration
-  intentDetection: {
-    // Strong keywords that immediately indicate intent (no LLM needed)
-=======
 
   intentDetection: {
->>>>>>> chat-backup
     strongKeywords: [
       "buy now",
       "purchase now",
@@ -113,10 +102,6 @@ export const config = {
       "subscribe now",
       "get started now",
     ],
-<<<<<<< HEAD
-    // Moderate keywords that suggest intent (check cache, then LLM if needed)
-=======
->>>>>>> chat-backup
     moderateKeywords: [
       "buy",
       "purchase",
@@ -133,10 +118,6 @@ export const config = {
       "sign up",
       "register",
     ],
-<<<<<<< HEAD
-    // Negative keywords that cancel intent detection
-=======
->>>>>>> chat-backup
     negativeKeywords: [
       "don't want",
       "not interested",
@@ -148,13 +129,7 @@ export const config = {
       "just browsing",
       "just looking",
     ],
-<<<<<<< HEAD
-    // Cache TTL in milliseconds (1 hour)
     cacheTTL: 60 * 60 * 1000,
-    // Maximum cache size (number of entries)
-=======
-    cacheTTL: 60 * 60 * 1000,
->>>>>>> chat-backup
     maxCacheSize: 1000,
   },
 } as const;

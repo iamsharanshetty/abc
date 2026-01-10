@@ -4,12 +4,8 @@ import { logger } from "@/lib/utils/logger";
 import { Database } from "@/lib/database.types";
 
 // ✅ Define proper types from Database schema
-<<<<<<< HEAD
-type WebsiteEmbedding = Database["public"]["Tables"]["website_embeddings"]["Row"];
-=======
 type WebsiteEmbedding =
   Database["public"]["Tables"]["website_embeddings"]["Row"];
->>>>>>> chat-backup
 
 interface CacheEntry {
   websiteUrl: string;

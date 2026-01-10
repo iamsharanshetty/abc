@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
   try {
+    const stripe = await getStripe();
+    
+    if (!stripe) {
+      return NextResponse.json(
+        { error: 'Stripe is not configured. Please install the stripe package and set STRIPE_SECRET_KEY.' },
+        { status: 503 }
+      );
+    }
+    
     const supabase = await createClient();
     const {
       data: { user },

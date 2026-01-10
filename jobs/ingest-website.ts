@@ -213,9 +213,6 @@ export const ingestWebsiteTask = task({
     minTimeoutInMs: 1000,
     maxTimeoutInMs: 10000,
   },
-<<<<<<< HEAD
-  run: ingestWebsiteHandler,
-=======
   run: async (payload: IngestWebsitePayload): Promise<IngestWebsiteResult> => {
     const startTime = Date.now();
     const deduplicationService = new DeduplicationService();
@@ -391,5 +388,4 @@ export const ingestWebsiteTask = task({
       return failureResult;
     }
   },
->>>>>>> chat-backup
 });

@@ -1,11 +1,6 @@
-<<<<<<< HEAD
-
-import { createClient } from "@supabase/supabase-js";
-=======
 // lib/services/analytics.ts
 import { createClient } from "../supabase/server";
 import { createServiceClient } from "../supabase/service";
->>>>>>> chat-backup
 import { Database } from "../database.types";
 import { logger } from "@/lib/utils/logger";
 
@@ -13,27 +8,6 @@ type AnalyticsEvent =
   Database["public"]["Tables"]["analytics_events"]["Insert"];
 
 export class AnalyticsService {
-<<<<<<< HEAD
-    /**
-     * Log a new analytics event
-     */
-    static async logEvent(
-        eventType: string,
-        data: {
-            sessionId?: string;
-            userId?: string;
-            agentId?: string;
-            websiteUrl?: string;
-            metadata?: Record<string, any>;
-        }
-    ) {
-        try {
-            // Use service role key to bypass RLS policies for analytics
-            const supabase = createClient<Database>(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!
-            );
-=======
   /**
    * Log a new analytics event
    * @param eventType - Type of event (e.g., "agent_created", "chat_message")
@@ -57,7 +31,6 @@ export class AnalyticsService {
       const supabase = useServiceClient
         ? createServiceClient()
         : await createClient();
->>>>>>> chat-backup
 
       // Sanitize metadata to ensure no PII is accidentally logged without consent
       const sanitizedMetadata = data.metadata ? { ...data.metadata } : null;
@@ -71,11 +44,7 @@ export class AnalyticsService {
         metadata: sanitizedMetadata,
       };
 
-<<<<<<< HEAD
-            const { error } = await supabase.from("analytics_events").insert(event as any);
-=======
       const { error } = await supabase.from("analytics_events").insert(event);
->>>>>>> chat-backup
 
       if (error) {
         logger.error("Failed to log analytics event", { error, event });

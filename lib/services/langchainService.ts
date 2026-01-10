@@ -3,12 +3,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { RunnableSequence } from "@langchain/core/runnables";
-<<<<<<< HEAD
-import { config } from "@/lib/config";
-=======
 import { config } from "@/lib/config"; // ✅ Client-safe config (for settings)
 import { serverConfig } from "@/lib/config.server"; // ✅ ADDED: Server config (for API key)
->>>>>>> chat-backup
 import { logger } from "@/lib/utils/logger";
 import { AgentContext } from "./aiAgent";
 
@@ -20,13 +16,8 @@ export class LangChainService {
   private apiKey: string;
 
   constructor() {
-<<<<<<< HEAD
-    // ✅ Just store the API key, don't create model yet
-    this.apiKey = config.openai.apiKey;
-=======
     // ✅ FIXED: Get API key from serverConfig instead of config
     this.apiKey = serverConfig.openai.apiKey;
->>>>>>> chat-backup
   }
 
   /**
@@ -40,11 +31,7 @@ export class LangChainService {
       modelName: "gpt-4o-mini",
       temperature: settings?.temperature ?? 0.7, // Use setting or default
       maxTokens: settings?.maxTokens ?? 500, // Use setting or default
-<<<<<<< HEAD
-      openAIApiKey: this.apiKey,
-=======
       openAIApiKey: this.apiKey, // ✅ Uses the API key from serverConfig
->>>>>>> chat-backup
     });
   }
 
@@ -58,25 +45,12 @@ export class LangChainService {
   } {
     const { role } = context;
 
-<<<<<<< HEAD
-    // Build the base prompt with ALL variables as placeholders
-    let templateString = `You are an AI assistant for a website. Your role is: {role}.`;
-
-    // Conditionally add persona section
-    templateString += `\n\nPersona: {persona}`;
-
-    // Conditionally add tone section
-    templateString += `\n\nTone: {tone}`;
-
-    // Add role-specific instructions based on role type
-=======
     let templateString = `You are an AI assistant for a website. Your role is: {role}.`;
 
     templateString += `\n\nPersona: {persona}`;
     templateString += `\n\nTone: {tone}`;
 
     // Role-specific instructions
->>>>>>> chat-backup
     if (role === "sales") {
       templateString += `\n\nYour goal is to help potential customers understand the product/service and guide them toward making a purchase. Be helpful, persuasive, and professional. When you sense interest, ask for contact information to follow up.`;
     } else if (role === "support") {
@@ -87,16 +61,6 @@ export class LangChainService {
       templateString += `\n\nYour goal is to assist users with their questions and provide helpful information.`;
     }
 
-<<<<<<< HEAD
-    // Add context retrieval section
-    templateString += `\n\nRelevant information from the website:\n{context}`;
-
-    // Add lead capture instructions
-    templateString += `\n\nIMPORTANT: If the user expresses interest (e.g., wants a demo, quote, more information, or to purchase), politely ask for their contact information. Say something like: "I'd be happy to help you with that! Could you please share your name and email so our team can follow up with you?"`;
-
-    // Add fallback instructions
-    templateString += `\n\nIf you don't have information about something, politely say: "I don't have that specific information right now, but I'd be happy to connect you with someone who can help. Would you like to share your contact details?"`;
-=======
     // ✅ FIXED: More confident prompt
     templateString += `\n\n=== WEBSITE INFORMATION ===
 The following is relevant information from the website that should help you answer the user's question:
@@ -117,7 +81,6 @@ IMPORTANT INSTRUCTIONS:
 
     // ✅ FIXED: Less defensive fallback
     templateString += `\n\nFALLBACK RESPONSE: ONLY use this if context is completely empty: "I don't have that specific information in my knowledge base right now, but I'd be happy to connect you with someone who can help."`;
->>>>>>> chat-backup
 
     // Add conversation history section
     templateString += `\n\nPrevious conversation:\n{conversationHistory}`;
@@ -125,10 +88,6 @@ IMPORTANT INSTRUCTIONS:
     // Current user message
     templateString += `\n\nUser: {userMessage}\n\nAssistant:`;
 
-<<<<<<< HEAD
-    // Define all input variables that will be provided
-=======
->>>>>>> chat-backup
     const inputVariables = [
       "role",
       "persona",
@@ -223,19 +182,6 @@ IMPORTANT INSTRUCTIONS:
     context: AgentContext,
     userMessage: string,
     relevantContext: string[],
-<<<<<<< HEAD
-    settings?: { temperature?: number; maxTokens?: number } // ✅ NEW parameter
-  ): Promise<string> {
-    try {
-      // ✅ Pass settings to chain creation
-      const chain = this.createAgentChain(context, settings);
-
-      // Format inputs
-      const contextText =
-        relevantContext.length > 0
-          ? relevantContext.join("\n\n")
-          : "No specific information available.";
-=======
     settings?: { temperature?: number; maxTokens?: number }
   ): Promise<string> {
     try {
@@ -260,7 +206,6 @@ IMPORTANT INSTRUCTIONS:
           }
         );
       }
->>>>>>> chat-backup
 
       const conversationHistoryText = this.formatConversationHistory(
         context.conversationHistory
@@ -270,14 +215,9 @@ IMPORTANT INSTRUCTIONS:
         contextLength: contextText.length,
         historyLength: conversationHistoryText.length,
         role: context.role,
-<<<<<<< HEAD
-        temperature: settings?.temperature ?? 0.7, // ✅ Log the settings being used
-        maxTokens: settings?.maxTokens ?? 500,
-=======
         temperature: settings?.temperature ?? 0.7,
         maxTokens: settings?.maxTokens ?? 500,
         hasContext: relevantContext.length > 0, // ✅ Track this
->>>>>>> chat-backup
       });
 
       // Invoke the chain with properly mapped inputs
@@ -287,8 +227,6 @@ IMPORTANT INSTRUCTIONS:
         userMessage: userMessage,
       });
 
-<<<<<<< HEAD
-=======
       // ✅ NEW: Detect if response indicates missing info
       const noInfoIndicators = [
         "don't have that specific information",
@@ -310,17 +248,13 @@ IMPORTANT INSTRUCTIONS:
         });
       }
 
->>>>>>> chat-backup
       return response;
     } catch (error) {
       logger.error("Error in LangChain generation", { error });
       throw error;
     }
   }
-<<<<<<< HEAD
 
-=======
->>>>>>> chat-backup
   /**
    * Batch generate responses (for testing multiple questions)
    * ✅ NOW ACCEPTS SETTINGS parameter

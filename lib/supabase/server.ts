@@ -32,12 +32,6 @@ export async function createClient() {
   return supabase;
 }
 
-<<<<<<< HEAD
-// ✅ Export helper types for easy access
-export type { Database } from "../database.types";
-export * from "./helpers";
-=======
 // Export types
 export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 export type { Database } from "../database.types";
->>>>>>> chat-backup

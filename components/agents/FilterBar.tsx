@@ -4,30 +4,6 @@
 import { Search, ChevronDown, Filter } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
-<<<<<<< HEAD
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-    DropdownMenuCheckboxItem,
-    DropdownMenuSeparator
-} from "@/components/ui/dropdown-menu";
-
-interface FilterBarProps {
-    onSearchChange?: (value: string) => void;
-    onStatusChange?: (value: string) => void;
-    onTypeChange?: (value: string) => void;
-    statusFilter?: string;
-    typeFilter?: string;
-}
-
-export function FilterBar({
-    onSearchChange,
-    onStatusChange,
-    onTypeChange,
-    statusFilter,
-    typeFilter
-=======
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -44,7 +20,6 @@ export function FilterBar({
   onSearchChange,
   onStatusChange,
   onTypeChange,
->>>>>>> chat-backup
 }: FilterBarProps) {
   return (
     <div className="flex flex-col md:flex-row gap-4 items-center justify-between mb-8">
@@ -59,98 +34,6 @@ export function FilterBar({
         />
       </div>
 
-<<<<<<< HEAD
-            {/* Filters */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="h-10 px-4 bg-card border-border/50 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground uppercase tracking-wide gap-2 rounded-lg transition-colors"
-                        >
-                            <Filter className="h-3.5 w-3.5" />
-                            {statusFilter || "Status"}
-                            <ChevronDown className="h-3 w-3 opacity-50" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[180px]">
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter === undefined}
-                            onCheckedChange={() => onStatusChange?.("")}
-                        >
-                            All Statuses
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter === "Running"}
-                            onCheckedChange={() => onStatusChange?.("Running")}
-                        >
-                            Running
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter === "Paused"}
-                            onCheckedChange={() => onStatusChange?.("Paused")}
-                        >
-                            Paused
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter === "Draft"}
-                            onCheckedChange={() => onStatusChange?.("Draft")}
-                        >
-                            Draft
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter === "Archived"}
-                            onCheckedChange={() => onStatusChange?.("Archived")}
-                        >
-                            Archived
-                        </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="h-10 px-4 bg-card border-border/50 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground uppercase tracking-wide gap-2 rounded-lg transition-colors"
-                        >
-                            <Filter className="h-3.5 w-3.5" />
-                            {typeFilter || "Type"}
-                            <ChevronDown className="h-3 w-3 opacity-50" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[180px]">
-                        <DropdownMenuCheckboxItem
-                            checked={typeFilter === undefined}
-                            onCheckedChange={() => onTypeChange?.("")}
-                        >
-                            All Types
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={typeFilter === "support"}
-                            onCheckedChange={() => onTypeChange?.("support")}
-                        >
-                            Support
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={typeFilter === "sales"}
-                            onCheckedChange={() => onTypeChange?.("sales")}
-                        >
-                            Sales
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={typeFilter === "assistant"}
-                            onCheckedChange={() => onTypeChange?.("assistant")}
-                        >
-                            Assistant
-                        </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </div>
-    );
-=======
       {/* Filters */}
       <div className="flex items-center gap-3 w-full md:w-auto">
         {/* Status Filter */}
@@ -235,5 +118,4 @@ export function FilterBar({
       </div>
     </div>
   );
->>>>>>> chat-backup
 }
