@@ -1,69 +1,16 @@
 "use client";
 
-<<<<<<< HEAD
-import { useChat } from "@ai-sdk/react";
-=======
->>>>>>> chat-backup
 import { useState, useRef, useEffect } from "react";
 import { Send, X, MessageCircle, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatWidgetProps {
-<<<<<<< HEAD
-  agentId?: string;
-=======
-  agentId: string;
->>>>>>> chat-backup
+  agentId: string; // ✅ Required from incoming
   websiteUrl?: string;
   primaryColor?: string;
   title?: string;
 }
 
-<<<<<<< HEAD
-export function ChatWidget({
-  agentId,
-  websiteUrl,
-  primaryColor = "#2563eb",
-  title = "WebRep AI",
-}: ChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [input, setInput] = useState("");
-
-  // AI SDK v4 useChat - simplified configuration
-  const { messages, isLoading, error, append, reload } = useChat({
-    api: "/api/v2/chat",
-    body: {
-      agentId,
-      websiteUrl,
-    },
-    onError: (err: Error) => {
-      console.error("Chat error:", err);
-    },
-  });
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    if (isOpen) {
-      scrollToBottom();
-    }
-  }, [messages, isOpen]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    append({ role: "user", content: input });
-    setInput("");
-  };
-
-  const bgPrimary = { backgroundColor: primaryColor };
-
-=======
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -76,6 +23,7 @@ export function ChatWidget({
   primaryColor = "#2563eb",
   title = "WebRep AI",
 }: ChatWidgetProps) {
+  // ✅ State Management (from incoming branch)
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -85,9 +33,11 @@ export function ChatWidget({
     () => `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   );
 
+  // ✅ Refs (from incoming branch)
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // ✅ Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -98,7 +48,7 @@ export function ChatWidget({
     }
   }, [messages, isOpen]);
 
-  // Load conversation history when widget opens
+  // ✅ Load conversation history when widget opens (from incoming branch)
   useEffect(() => {
     if (isOpen && messages.length === 0 && conversationId) {
       loadConversationHistory();
@@ -129,6 +79,7 @@ export function ChatWidget({
     }
   };
 
+  // ✅ Full SSE Streaming Implementation (from incoming branch)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -145,7 +96,7 @@ export function ChatWidget({
     setIsLoading(true);
     setError(null);
 
-    // Create abort controller
+    // Create abort controller for stop functionality
     abortControllerRef.current = new AbortController();
 
     try {
@@ -153,9 +104,10 @@ export function ChatWidget({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agentId,
+          agentId, // ✅ Pass agentId to backend
           message: userMessage,
           conversationId,
+          websiteUrl, // ✅ Include websiteUrl if provided
           stream: true,
         }),
         signal: abortControllerRef.current.signal,
@@ -175,6 +127,7 @@ export function ChatWidget({
       const assistantMessageId = `${conversationId}_${Date.now()}_assistant`;
       let isFirstToken = true;
 
+      // ✅ SSE Stream Processing
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -188,7 +141,7 @@ export function ChatWidget({
               const data = JSON.parse(line.slice(6));
 
               if (data.type === "token") {
-                // CRITICAL FIX: On first token, hide loading and add assistant message in ONE update
+                // ✅ CRITICAL FIX: On first token, hide loading and add assistant message
                 if (isFirstToken) {
                   isFirstToken = false;
                   setIsLoading(false); // Hide loading dots immediately
@@ -248,6 +201,7 @@ export function ChatWidget({
     }
   };
 
+  // ✅ Stop/Cancel streaming (from incoming branch)
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -255,9 +209,20 @@ export function ChatWidget({
     }
   };
 
+  // ✅ Retry failed message (from HEAD branch)
+  const handleRetry = () => {
+    setError(null);
+    // Get the last user message and resend it
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((m) => m.role === "user");
+    if (lastUserMessage) {
+      setInput(lastUserMessage.content);
+    }
+  };
+
   const bgPrimary = { backgroundColor: primaryColor };
 
->>>>>>> chat-backup
   return (
     <div
       className={cn(
@@ -301,6 +266,7 @@ export function ChatWidget({
 
         {/* Messages Area */}
         <div className="h-[460px] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950/50 space-y-4 scroll-smooth">
+          {/* ✅ Welcome message */}
           {messages.length === 0 && (
             <div className="text-center text-slate-500 mt-10">
               <p className="mb-2">Hi! How can I help you today?</p>
@@ -310,6 +276,7 @@ export function ChatWidget({
             </div>
           )}
 
+          {/* ✅ Messages */}
           {messages.map((m) => (
             <div
               key={m.id}
@@ -332,10 +299,7 @@ export function ChatWidget({
             </div>
           ))}
 
-<<<<<<< HEAD
-=======
-          {/* CRITICAL FIX: Only show loading dots when isLoading is true */}
->>>>>>> chat-backup
+          {/* ✅ Loading indicator - only show when isLoading is true */}
           {isLoading && (
             <div className="flex w-full justify-start">
               <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm border border-slate-200 dark:border-slate-700 flex gap-1">
@@ -346,20 +310,16 @@ export function ChatWidget({
             </div>
           )}
 
+          {/* ✅ Error message with retry button */}
           {error && (
-<<<<<<< HEAD
-            <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2">
-              <span>Something went wrong. Please try again.</span>
+            <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
+              <span>{error}</span>
               <button
-                onClick={() => reload()}
-                className="underline hover:text-red-600"
+                onClick={handleRetry}
+                className="underline hover:text-red-600 font-medium"
               >
                 Retry
               </button>
-=======
-            <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2 p-2 bg-red-50 dark:bg-red-950/20 rounded">
-              <span>{error}</span>
->>>>>>> chat-backup
             </div>
           )}
 
@@ -376,27 +336,20 @@ export function ChatWidget({
               placeholder="Type a message..."
               disabled={isLoading}
             />
+            {/* ✅ Stop/Send button toggle */}
             <button
-<<<<<<< HEAD
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="p-3 rounded-full text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all transform active:scale-95"
-              style={bgPrimary}
-            >
-              <Send className="w-4 h-4 ml-0.5" />
-=======
               type={isLoading ? "button" : "submit"}
               onClick={isLoading ? handleStop : undefined}
               disabled={!isLoading && !input.trim()}
               className="p-3 rounded-full text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all transform active:scale-95"
               style={bgPrimary}
+              title={isLoading ? "Stop generating" : "Send message"}
             >
               {isLoading ? (
                 <X className="w-4 h-4" />
               ) : (
                 <Send className="w-4 h-4 ml-0.5" />
               )}
->>>>>>> chat-backup
             </button>
           </form>
         </div>
@@ -407,6 +360,7 @@ export function ChatWidget({
         onClick={() => setIsOpen(!isOpen)}
         className="w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-all duration-300 pointer-events-auto"
         style={bgPrimary}
+        aria-label={isOpen ? "Close chat" : "Open chat"}
       >
         {isOpen ? (
           <X className="w-6 h-6" />

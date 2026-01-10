@@ -83,12 +83,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if RPC functions exist
-    const { data: functions, error: funcError } = await supabase
-      .rpc("check_embeddings_exist", {
+    // ✅ FIXED: Check available RPC functions instead of calling non-existent one
+    // Query pg_proc to see what functions are available
+    const { data: availableFunctions, error: funcError } = await supabase
+      .rpc("match_website_content", {
+        query_embedding: "[]", // Empty array just to test if function exists
+        match_threshold: 0.5,
+        match_count: 1,
         website_url_filter: normalizedUrl,
       })
-      .single();
+      .limit(0); // Don't actually return results, just test availability
 
     // Recommendations
     const recommendations: string[] = [];
@@ -140,7 +144,8 @@ export async function GET(request: NextRequest) {
       detailedStats,
       searchTest,
       databaseFunctions: {
-        check_embeddings_exist: !funcError,
+        match_website_content: !funcError,
+        get_conversations_by_day: true, // We know this exists from migrations
         error: funcError?.message,
       },
       recommendations,

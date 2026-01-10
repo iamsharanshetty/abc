@@ -27,10 +27,7 @@ import { cn } from "@/lib/utils";
 import { validateUrl } from "@/lib/validation";
 import { AGENT_ROLES, AgentRole, SUGGESTED_FUNCTIONS } from "@/types/agent";
 import { logger } from "@/lib/utils/logger";
-<<<<<<< HEAD
-=======
 import { createAgent } from "@/lib/actions/agents";
->>>>>>> chat-backup
 
 const PROGRESS_STEPS = [
   "Scraping website content...",
@@ -208,10 +205,6 @@ function CreateAgentPageContent() {
       setStep("generating");
       setProgressIndex(0);
 
-<<<<<<< HEAD
-      // ✅ ONLY call the V2 API - NOT /api/analyze
-=======
->>>>>>> chat-backup
       logger.debug("Calling ingestion API", { endpoint: "/api/v2/ingest" });
       const response = await fetch("/api/v2/ingest", {
         method: "POST",
@@ -300,8 +293,6 @@ function CreateAgentPageContent() {
     }
   };
 
-<<<<<<< HEAD
-=======
   /**
    * Save agent to database after successful analysis
    */
@@ -374,7 +365,6 @@ function CreateAgentPageContent() {
     }
   };
 
->>>>>>> chat-backup
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col md:flex-row md:overflow-hidden transition-all duration-500 ease-in-out">
       {/* Left Panel (Input) */}
@@ -488,11 +478,7 @@ function CreateAgentPageContent() {
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* Right Panel (Progress / Settings) */}
-=======
       {/* Right Panel (Progress / Settings / Complete) */}
->>>>>>> chat-backup
       <div
         className={cn(
           "flex-1 p-6 transition-all duration-500 ease-in-out overflow-y-auto",
@@ -500,10 +486,7 @@ function CreateAgentPageContent() {
         )}
       >
         <div className="h-full flex flex-col justify-center max-w-2xl mx-auto">
-<<<<<<< HEAD
-=======
           {/* GENERATING STEP */}
->>>>>>> chat-backup
           {step === "generating" && (
             <div className="space-y-8">
               <div className="space-y-2">
@@ -550,10 +533,6 @@ function CreateAgentPageContent() {
                 ))}
               </div>
 
-<<<<<<< HEAD
-              {/* Cancel Button */}
-=======
->>>>>>> chat-backup
               <div className="flex justify-center pt-4">
                 <Button
                   variant="outline"
@@ -566,19 +545,12 @@ function CreateAgentPageContent() {
             </div>
           )}
 
-<<<<<<< HEAD
-=======
           {/* SETTINGS STEP */}
->>>>>>> chat-backup
           {step === "settings" && analysisResult && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-<<<<<<< HEAD
-                  <h2 className="text-2xl font-semibold">Agent Created!</h2>
-=======
                   <h2 className="text-2xl font-semibold">Analysis Complete!</h2>
->>>>>>> chat-backup
                   <p className="text-muted-foreground">
                     Analyzed{" "}
                     {analysisResult.pagesProcessed ||
@@ -666,8 +638,6 @@ function CreateAgentPageContent() {
                 </CardContent>
               </Card>
 
-<<<<<<< HEAD
-=======
               {error && (
                 <div className="flex items-center text-sm text-red-500 p-3 bg-red-50 dark:bg-red-950/20 rounded-md">
                   <AlertCircle className="h-4 w-4 mr-2" />
@@ -675,7 +645,6 @@ function CreateAgentPageContent() {
                 </div>
               )}
 
->>>>>>> chat-backup
               <div className="flex justify-end space-x-4">
                 <Button
                   variant="outline"
@@ -686,13 +655,6 @@ function CreateAgentPageContent() {
                     setProgressIndex(0);
                     setCurrentJobId(null);
                   }}
-<<<<<<< HEAD
-                >
-                  Create Another
-                </Button>
-                <Button>
-                  Configure Agent
-=======
                   disabled={isSavingAgent}
                 >
                   Create Another
@@ -802,7 +764,6 @@ function CreateAgentPageContent() {
                 </Button>
                 <Button onClick={() => router.push("/dashboard")}>
                   Go to Dashboard
->>>>>>> chat-backup
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
