@@ -16,5 +16,10 @@ export default defineConfig({
       randomize: true,
     },
   },
+  // Build configuration for production
+  build: {
+    external: ["puppeteer", "puppeteer-core", "@sparticuz/chromium"],
+  },
+
   dirs: ["./jobs"], // Changed from "./src/trigger" to "./jobs"
 });

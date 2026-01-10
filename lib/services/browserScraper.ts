@@ -1,4 +1,4 @@
-// lib/services/browserScraper.ts - IMPROVED VERSION
+// lib/services/browserScraper.ts - IMPROVED VERSION WITH PUPPETEER FIX
 import puppeteer, { Browser, Page } from "puppeteer";
 import { ContentParser, ParsedContent } from "./contentParser";
 import { config } from "../config";

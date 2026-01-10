@@ -1,12 +1,12 @@
 // lib/supabase/server.ts
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { Database } from "../database.types";
+import type { Database } from "../database.types";
 
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -14,7 +14,7 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
+        setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
@@ -28,8 +28,16 @@ export async function createClient() {
       },
     }
   );
+
+  return supabase;
 }
 
+<<<<<<< HEAD
 // ✅ Export helper types for easy access
 export type { Database } from "../database.types";
 export * from "./helpers";
+=======
+// Export types
+export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+export type { Database } from "../database.types";
+>>>>>>> chat-backup

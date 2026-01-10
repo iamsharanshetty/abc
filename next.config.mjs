@@ -2,7 +2,11 @@
 const nextConfig = {
   eslint: {
     // This will still show warnings but won't fail the build
+<<<<<<< HEAD
     ignoreDuringBuilds: true,
+=======
+    ignoreDuringBuilds: false,
+>>>>>>> chat-backup
   },
   typescript: {
     // Ignore TypeScript errors during build (temporary)

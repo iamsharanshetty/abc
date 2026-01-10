@@ -72,13 +72,14 @@ export async function POST(
 
     logger.info("Scraping complete", { url, pagesFound: pages.length });
 
-    // Initialize embedding service
+    // Initialize embedding service and supabase client
     const embeddingService = new EmbeddingService();
+    const supabase = await createClient();
 
     // Delete existing embeddings
     logger.debug("Deleting existing embeddings", { url });
     try {
-      await embeddingService.deleteWebsiteEmbeddings(url);
+      await embeddingService.deleteWebsiteEmbeddings(url, supabase);
     } catch (error) {
       logger.warn("Failed to delete existing embeddings", { error });
     }
@@ -100,10 +101,16 @@ export async function POST(
       }
 
       try {
-        await embeddingService.storeEmbeddings(url, page.url, page.content, {
-          title: page.title,
-          scrapedAt: new Date().toISOString(),
-        });
+        await embeddingService.storeEmbeddings(
+          url,
+          page.url,
+          page.content,
+          {
+            title: page.title,
+            scrapedAt: new Date().toISOString(),
+          },
+          supabase
+        );
         processedPages++;
         logger.debug("Successfully processed page", { pageUrl: page.url });
       } catch (error) {

@@ -1,8 +1,13 @@
 // lib/config.ts
+// ✅ SAFE: This file can be imported anywhere (client or server)
+// ❌ DO NOT add any secrets here!
+
 import { z } from "zod";
 
 const envSchema = z.object({
-  OPENAI_API_KEY: z.string().min(1, "OpenAI API key is required"),
+  // ✅ REMOVED: OPENAI_API_KEY - moved to config.server.ts
+
+  // Public Supabase credentials (safe to expose)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL must be a valid URL"),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z
     .string()
@@ -14,7 +19,7 @@ const envSchema = z.object({
     .default("development"),
   MAX_REQUESTS_PER_MINUTE: z.string().optional().default("50"),
   REQUEST_WINDOW_MS: z.string().optional().default("60000"),
-  MAX_PAGES_TO_SCRAPE: z.string().optional().default("50"),
+  MAX_PAGES_TO_SCRAPE: z.string().optional().default("30"),
   MIN_QUALITY_SCORE: z.string().optional().default("20"),
   CHUNK_SIZE: z.string().optional().default("1000"),
   CHUNK_OVERLAP: z.string().optional().default("200"),
@@ -23,8 +28,12 @@ const envSchema = z.object({
 function validateEnv() {
   try {
     return envSchema.parse({
+<<<<<<< HEAD
       OPENAI_API_KEY:
         process.env.ALENTA_OPENAI_KEY || process.env.OPENAI_API_KEY,
+=======
+      // ✅ REMOVED: OPENAI_API_KEY validation
+>>>>>>> chat-backup
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       LOG_LEVEL: process.env.LOG_LEVEL,
@@ -49,40 +58,50 @@ function validateEnv() {
 const env = validateEnv();
 
 export const config = {
+  // ✅ OpenAI settings (non-secret)
+  // ❌ NO API KEY HERE - it's in config.server.ts
   openai: {
-    apiKey: env.OPENAI_API_KEY,
     embeddingModel: "text-embedding-3-small" as const,
     maxTokens: 8191,
     batchSize: 100,
     maxRetries: 3,
     retryDelay: 1000,
   },
+
   supabase: {
     url: env.NEXT_PUBLIC_SUPABASE_URL,
     anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     maxBatchSize: 1000,
   },
+
   ingestion: {
-    maxPages: parseInt(env.MAX_PAGES_TO_SCRAPE || "50"),
+    maxPages: parseInt(env.MAX_PAGES_TO_SCRAPE || "30"),
     maxContentLength: 8000,
     chunkSize: parseInt(env.CHUNK_SIZE || "1000"),
     chunkOverlap: parseInt(env.CHUNK_OVERLAP || "200"),
     maxConcurrentRequests: 5,
     minQualityScore: parseInt(env.MIN_QUALITY_SCORE || "20"),
   },
+
   rateLimit: {
     maxRequestsPerMinute: parseInt(env.MAX_REQUESTS_PER_MINUTE || "50"),
     requestWindow: parseInt(env.REQUEST_WINDOW_MS || "60000"),
   },
+
   scraping: {
     httpTimeout: 20000,
     browserTimeout: 30000,
     pageWaitTime: 2000,
     retryAttempts: 3,
   },
+<<<<<<< HEAD
   // ✅ NEW: Intent detection configuration
   intentDetection: {
     // Strong keywords that immediately indicate intent (no LLM needed)
+=======
+
+  intentDetection: {
+>>>>>>> chat-backup
     strongKeywords: [
       "buy now",
       "purchase now",
@@ -94,7 +113,10 @@ export const config = {
       "subscribe now",
       "get started now",
     ],
+<<<<<<< HEAD
     // Moderate keywords that suggest intent (check cache, then LLM if needed)
+=======
+>>>>>>> chat-backup
     moderateKeywords: [
       "buy",
       "purchase",
@@ -111,7 +133,10 @@ export const config = {
       "sign up",
       "register",
     ],
+<<<<<<< HEAD
     // Negative keywords that cancel intent detection
+=======
+>>>>>>> chat-backup
     negativeKeywords: [
       "don't want",
       "not interested",
@@ -123,9 +148,13 @@ export const config = {
       "just browsing",
       "just looking",
     ],
+<<<<<<< HEAD
     // Cache TTL in milliseconds (1 hour)
     cacheTTL: 60 * 60 * 1000,
     // Maximum cache size (number of entries)
+=======
+    cacheTTL: 60 * 60 * 1000,
+>>>>>>> chat-backup
     maxCacheSize: 1000,
   },
 } as const;

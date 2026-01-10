@@ -52,6 +52,79 @@ export class AIAgentService {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Expand and enhance query to improve semantic matching
+   * Helps with short or vague queries by adding context
+   */
+  private expandQuery(query: string, websiteUrl: string): string {
+    const lowerQuery = query.toLowerCase().trim();
+    const wordCount = lowerQuery.split(/\s+/).filter(w => w.length > 0).length;
+    
+    // Extract domain/company name from URL
+    try {
+      const urlObj = new URL(websiteUrl);
+      const domain = urlObj.hostname.replace("www.", "");
+      const companyName = domain.split(".")[0];
+      
+      // Common query patterns that need expansion (order matters - more specific first)
+      const expansions: Array<{ pattern: RegExp; expansion: string }> = [
+        // Client testimonials/feedback patterns
+        { pattern: /what.*your.*client/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
+        { pattern: /what.*client.*say/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
+        { pattern: /client.*say/i, expansion: `testimonials feedback reviews from clients about ${companyName}` },
+        { pattern: /testimonial/i, expansion: `client testimonials feedback reviews about ${companyName}` },
+        { pattern: /review/i, expansion: `client reviews testimonials feedback about ${companyName}` },
+        { pattern: /feedback/i, expansion: `client feedback testimonials reviews about ${companyName}` },
+        
+        // Services/products patterns
+        { pattern: /what.*service/i, expansion: `services products offerings from ${companyName}` },
+        { pattern: /your.*service/i, expansion: `services products offerings from ${companyName}` },
+        { pattern: /service.*offer/i, expansion: `services products offerings from ${companyName}` },
+        
+        // General company info patterns
+        { pattern: /what.*do.*you.*do/i, expansion: `what does ${companyName} do services products` },
+        { pattern: /who.*are.*you/i, expansion: `what is ${companyName} company services products` },
+        { pattern: /what.*is.*this/i, expansion: `what is ${companyName} company services` },
+      ];
+      
+      // Check for pattern matches
+      for (const { pattern, expansion } of expansions) {
+        if (pattern.test(lowerQuery)) {
+          const expanded = `${query} ${expansion}`;
+          logger.debug("Query expanded with pattern match", {
+            original: query.substring(0, 50),
+            expanded: expanded.substring(0, 100),
+            pattern: pattern.toString(),
+          });
+          return expanded;
+        }
+      }
+      
+      // If query is very short (less than 15 chars or 3 words), add generic context
+      if (query.length < 15 || wordCount < 3) {
+        const expanded = `${query} ${companyName} information details`;
+        logger.debug("Query expanded for short query", {
+          original: query.substring(0, 50),
+          expanded: expanded.substring(0, 100),
+        });
+        return expanded;
+      }
+      
+      // If company name not in query and query is medium length, add company name
+      if (!lowerQuery.includes(companyName.toLowerCase()) && wordCount < 6) {
+        return `${query} ${companyName}`;
+      }
+    } catch (e) {
+      // If URL parsing fails, just return original query
+      logger.debug("Failed to parse URL for query expansion", { websiteUrl, error: e });
+    }
+    
+    return query;
+  }
+
+  /**
+>>>>>>> chat-backup
    * Search for relevant context from website embeddings
    */
   private async searchContext(
@@ -63,6 +136,7 @@ export class AIAgentService {
       const supabase = await createClient();
 
       const contextRetrievalCount = settings?.contextRetrievalCount || 5;
+<<<<<<< HEAD
       const matchThreshold = settings?.matchThreshold || 0.7;
 
       const validatedCount = Math.min(Math.max(contextRetrievalCount, 1), 10);
@@ -70,11 +144,26 @@ export class AIAgentService {
 
       logger.debug("Context search with configurable parameters", {
         websiteUrl,
+=======
+      const matchThreshold = settings?.matchThreshold || 0.3; // Lowered from 0.5
+
+      const validatedCount = Math.min(Math.max(contextRetrievalCount, 1), 10);
+      const validatedThreshold = Math.min(Math.max(matchThreshold, 0.2), 0.9); // Lowered min from 0.3
+
+      // ✅ QUERY EXPANSION: Enhance query to improve matching
+      const expandedQuery = this.expandQuery(query, websiteUrl);
+      
+      logger.debug("Context search with configurable parameters", {
+        websiteUrl,
+        originalQuery: query.substring(0, 50),
+        expandedQuery: expandedQuery.substring(0, 100),
+>>>>>>> chat-backup
         count: validatedCount,
         threshold: validatedThreshold,
         fromSettings: !!settings,
       });
 
+<<<<<<< HEAD
       const queryEmbedding = await openai.embeddings.create({
         model: config.openai.embeddingModel,
         input: query,
@@ -96,15 +185,218 @@ export class AIAgentService {
       }
 
       const results = data?.map((item: any) => item.content_section) || [];
+=======
+      // ✅ STEP 1: Generate embedding for the expanded query
+      const queryEmbedding = await openai.embeddings.create({
+        model: config.openai.embeddingModel,
+        input: expandedQuery,
+      });
+
+      const embeddingVector = queryEmbedding.data[0].embedding;
+      const embeddingString = JSON.stringify(embeddingVector);
+
+      logger.debug("Calling match_website_content RPC", {
+        embeddingLength: embeddingVector.length,
+        stringLength: embeddingString.length,
+      });
+
+      // ✅ CRITICAL FIX: Try multiple URL variations to handle trailing slash inconsistencies
+      const urlVariations = [
+        websiteUrl, // Original URL
+        websiteUrl.endsWith("/") ? websiteUrl.slice(0, -1) : websiteUrl + "/", // Toggle trailing slash
+      ];
+
+      let data = null;
+      let error = null;
+      let matchedUrl = null;
+
+      // Try each URL variation
+      for (const urlVariant of urlVariations) {
+        const result = await (supabase.rpc as any)("match_website_content", {
+          query_embedding: embeddingString,
+          match_threshold: validatedThreshold,
+          match_count: validatedCount,
+          website_url_filter: urlVariant,
+        });
+
+        if (result.error) {
+          error = result.error;
+          continue;
+        }
+
+        if (result.data && result.data.length > 0) {
+          data = result.data;
+          matchedUrl = urlVariant;
+          logger.debug("✅ Found results with URL variant", {
+            originalUrl: websiteUrl,
+            matchedUrl: urlVariant,
+            count: data.length,
+          });
+          break;
+        }
+      }
+
+      // Handle errors
+      if (error && !data) {
+        logger.error("Error searching context", {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          websiteUrl,
+          triedUrls: urlVariations,
+        });
+
+        if (error.message?.includes("function match_website_content")) {
+          logger.error(
+            "❌ RPC function 'match_website_content' not found in database!"
+          );
+          logger.error(
+            "📝 Run the migration: supabase/migrations/vector_search_function.sql"
+          );
+        }
+
+        if (error.message?.includes("malformed")) {
+          logger.error(
+            "❌ Malformed vector format - check embedding dimensions"
+          );
+          logger.error(`   Expected: 1536, Got: ${embeddingVector.length}`);
+        }
+
+        return [];
+      }
+
+      // Check if we got results
+      if (!data || data.length === 0) {
+        logger.warn("No matching content found with initial threshold", {
+          websiteUrl,
+          triedUrls: urlVariations,
+          originalQuery: query.substring(0, 50),
+          expandedQuery: expandedQuery.substring(0, 100),
+          threshold: validatedThreshold,
+        });
+
+        // ✅ DIAGNOSTIC: Check if embeddings exist at all
+        const { data: checkData, error: checkError } = await supabase
+          .from("website_embeddings")
+          .select("website_url")
+          .or(urlVariations.map((url) => `website_url.eq.${url}`).join(","))
+          .limit(1);
+
+        if (checkError) {
+          logger.error("Error checking for embeddings", { error: checkError });
+          return [];
+        } else if (!checkData || checkData.length === 0) {
+          logger.error("❌ NO EMBEDDINGS FOUND in database!", {
+            searchedUrls: urlVariations,
+            recommendation: "Run website ingestion: trigger ingest-website job",
+          });
+          return [];
+        } else {
+          // ✅ ADAPTIVE THRESHOLD: Try with a lower threshold if embeddings exist but scores are too low
+          const fallbackThreshold = Math.max(0.2, validatedThreshold - 0.2);
+          logger.info("🔄 Retrying with lower threshold", {
+            originalThreshold: validatedThreshold,
+            fallbackThreshold,
+            embeddingsFound: checkData.length,
+          });
+
+          // Try again with lower threshold
+          for (const urlVariant of urlVariations) {
+            const fallbackResult = await (supabase.rpc as any)(
+              "match_website_content",
+              {
+                query_embedding: embeddingString,
+                match_threshold: fallbackThreshold,
+                match_count: validatedCount,
+                website_url_filter: urlVariant,
+              }
+            );
+
+            if (fallbackResult.error) {
+              continue;
+            }
+
+            if (fallbackResult.data && fallbackResult.data.length > 0) {
+              data = fallbackResult.data;
+              matchedUrl = urlVariant;
+              logger.info("✅ Found results with fallback threshold", {
+                fallbackThreshold,
+                count: data.length,
+                topSimilarity: data[0]?.similarity?.toFixed(3) || "N/A",
+              });
+              break;
+            }
+          }
+
+          // If still no results, log warning and return empty
+          if (!data || data.length === 0) {
+            logger.warn("⚠️  Embeddings exist but similarity scores too low even with fallback", {
+              originalThreshold: validatedThreshold,
+              fallbackThreshold,
+              embeddingsFound: checkData.length,
+              recommendation:
+                "Consider lowering matchThreshold in agent settings (current: " +
+                validatedThreshold +
+                ") or improving content quality",
+            });
+            return [];
+          }
+        }
+      }
+
+      const results = data.map((item: any) => item.content_section) || [];
+>>>>>>> chat-backup
 
       logger.debug("Context search completed", {
         resultsCount: results.length,
         requestedCount: validatedCount,
+<<<<<<< HEAD
       });
 
       return results;
     } catch (error) {
       logger.error("Error in searchContext", { error });
+=======
+        matchedUrl,
+        similarities: data
+          .map((d: any) => d.similarity?.toFixed(3) || "N/A")
+          .slice(0, 3),
+      });
+
+      // ✅ Enhanced success logging
+      if (results.length > 0) {
+        const avgSimilarity = (
+          data.reduce((sum: number, d: any) => sum + (d.similarity || 0), 0) /
+          data.length
+        ).toFixed(3);
+        const topSimilarity = data[0]?.similarity?.toFixed(3) || "N/A";
+
+        logger.info("✅ Retrieved relevant context", {
+          chunks: results.length,
+          avgSimilarity,
+          topSimilarity,
+          matchedUrl,
+          urlMismatch: matchedUrl !== websiteUrl,
+        });
+
+        // Warn if URL normalization was needed
+        if (matchedUrl !== websiteUrl) {
+          logger.warn("⚠️  URL mismatch detected!", {
+            agentUrl: websiteUrl,
+            databaseUrl: matchedUrl,
+            recommendation: "Normalize URLs during ingestion to avoid this",
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      logger.error("Error in searchContext", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+>>>>>>> chat-backup
       return [];
     }
   }
@@ -1046,6 +1338,7 @@ Answer:`;
         responseLength: assistantResponse.length,
       });
 
+<<<<<<< HEAD
       const { error } = await supabase.from("conversations").insert({
         id: conversationId,
         agent_id: agentId,
@@ -1056,6 +1349,26 @@ Answer:`;
           timestamp: new Date().toISOString(),
         },
       });
+=======
+      // Use UPSERT to handle both new conversations and updates to existing ones
+      const { error } = await supabase
+        .from("conversations")
+        .upsert(
+          {
+            id: conversationId,
+            agent_id: agentId,
+            user_message: userMessage,
+            assistant_response: assistantResponse,
+            metadata: {
+              source: "public_chat",
+              timestamp: new Date().toISOString(),
+            },
+          },
+          {
+            onConflict: "id",
+          }
+        );
+>>>>>>> chat-backup
 
       if (error) {
         logger.error("Error saving public conversation", {
