@@ -95,13 +95,17 @@ export class ContentParser {
     // Step 3: Extract structured data
     const title = this.extractTitle($);
     const headings = this.extractHeadings($);
-    const paragraphs = this.extractParagraphs($);
+    const { paragraphs, hasBoilerplate } = this.extractParagraphs($);
 
     // Step 4: Clean and normalize text
     const cleanedContent = this.cleanText(mainContent);
 
     // Step 5: Generate metadata with enhanced detection
-    const metadata = this.generateEnhancedMetadata(cleanedContent, paragraphs);
+    const metadata = this.generateEnhancedMetadata(
+      cleanedContent,
+      paragraphs,
+      hasBoilerplate
+    );
 
     return {
       title,
@@ -240,19 +244,28 @@ export class ContentParser {
   /**
    * Extract meaningful paragraphs with improved filtering
    */
-  private extractParagraphs($: cheerio.Root): string[] {
+  private extractParagraphs($: cheerio.Root): {
+    paragraphs: string[];
+    hasBoilerplate: boolean;
+  } {
     const paragraphs: string[] = [];
     const seenFingerprints = new Set<string>();
+    let hasBoilerplate = false;
 
     $("p").each((_, element) => {
       const text = $(element).text().trim();
+      const isBoilerplate = this.isBoilerplate(text);
+
+      if (isBoilerplate) {
+        hasBoilerplate = true;
+      }
 
       // Only include paragraphs with meaningful content
       if (
         text.length > 50 &&
         text.length < 2000 &&
         this.isLikelyContent(text) &&
-        !this.isBoilerplate(text)
+        !isBoilerplate
       ) {
         // Check for duplicates
         const fingerprint = this.createTextFingerprint(text);
@@ -263,7 +276,7 @@ export class ContentParser {
       }
     });
 
-    return paragraphs;
+    return { paragraphs, hasBoilerplate };
   }
 
   /**
@@ -349,7 +362,8 @@ export class ContentParser {
    */
   private generateEnhancedMetadata(
     content: string,
-    paragraphs: string[]
+    paragraphs: string[],
+    hasBoilerplateDetected: boolean
   ): {
     wordCount: number;
     estimatedReadTime: number;
@@ -369,8 +383,9 @@ export class ContentParser {
     );
     const uniqueWordRatio = wordCount > 0 ? uniqueWords.size / wordCount : 0;
 
-    // Detect boilerplate
-    const hasBoilerplate = paragraphs.some((p) => this.isBoilerplate(p));
+    // Detect boilerplate (checked during extraction OR remaining in paragraphs)
+    const hasBoilerplate =
+      hasBoilerplateDetected || paragraphs.some((p) => this.isBoilerplate(p));
 
     // Basic language detection
     const language = this.detectLanguage(content);
